@@ -1,0 +1,23 @@
+pix:
+  topico: pagamentos.pix.realizado.v1
+  cloud-events:
+    source: /pagamentos/servico-pix
+    type: pagamentos.pix.realizado.v1
+
+spring:
+  application:
+    name: servico-pix
+  kafka:
+    bootstrap-servers: localhost:19092
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: WARN
+    br.pucminas.aed: INFO
+    org.springframework.boot: INFO
+  pattern:
+    console: "%d{HH:mm:ss} %-5level %-28logger{0} : %msg%n"
+
