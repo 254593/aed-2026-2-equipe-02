@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import br.pucminas.aed.pix.domain.PixRealizadoEvent;
 import br.pucminas.aed.pix.domain.RealizacaoPixVO;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class PixService {
@@ -27,6 +28,7 @@ public class PixService {
     private final String origem;
     private final String tipo;
 
+    @Autowired
     public PixService(KafkaTemplate<String, Object> clienteDoBroker,
                       ResultadoPublicacaoListener resultadoPublicacaoListener,
                       @Value("${pix.topico}") String topico,
