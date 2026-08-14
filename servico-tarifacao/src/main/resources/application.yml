@@ -1,0 +1,55 @@
+tarifacao:
+  # Grafia UNICA e versionada do tipo do evento: dominio.entidade.fato.v1.
+  # O mesmo texto e o nome do topico e o valor do cabecalho ce_type publicado
+  # pelo servico-pix. Duas grafias para a mesma coisa e um dos erros que o
+  # enunciado lista como facil de evitar.
+  topico: pagamentos.pix.realizado.v1
+
+spring:
+  application:
+    name: servico-tarifacao
+
+  # Sem servidor web: um consumidor nao precisa de porta HTTP.
+  main:
+    web-application-type: none
+
+  datasource:
+    url: jdbc:postgresql://localhost:15432/tarifacao
+    username: tarifacao
+    password: tarifacao
+  sql:
+    init:
+      mode: always          # cria as tabelas e a carga ficticia a cada subida
+
+  kafka:
+    bootstrap-servers: localhost:19092
+
+    consumer:
+      group-id: tarifacao
+      auto-offset-reset: earliest
+      enable-auto-commit: false       # quem confirma o offset e o nosso codigo
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        # Ignora o cabecalho de tipo que o produtor eventualmente mande: a
+        # classe a usar e a NOSSA. E o que permite aos dois servicos terem
+        # classes diferentes para o mesmo evento.
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: br.pucminas.aed.tarifacao.domain.PixRealizadoEvent
+        spring.json.trusted.packages: br.pucminas.aed.tarifacao.domain
+
+        # Se este servico subir antes de o topico existir, ele recebe
+        # UNKNOWN_TOPIC_OR_PARTITION e so tenta de novo quando os metadados
+        # expiram — o padrao sao 5 MINUTOS de tela parada.
+        metadata.max.age.ms: 5000
+
+    listener:
+      ack-mode: manual_immediate      # o ack e explicito, depois do commit
+
+logging:
+  level:
+    root: WARN
+    br.pucminas.aed: INFO
+    org.springframework.boot: INFO
+  pattern:
+    console: "%d{HH:mm:ss} %-5level %-28logger{0} : %msg%n"

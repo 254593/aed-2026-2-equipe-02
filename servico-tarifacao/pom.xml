@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.5</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>br.pucminas.aed</groupId>
+  <artifactId>servico-tarifacao</artifactId>
+  <version>1.0</version>
+  <name>AED - Equipe 02 - Servico de Tarifacao (consumidor)</name>
+
+  <!--
+    Projeto INDEPENDENTE do servico-pix. Nao ha pom pai comum, nao ha modulo de
+    contrato compartilhado e nao ha JAR de evento entre os dois. O contrato e o
+    JSON que trafega no topico, e so.
+
+    Um modulo compartilhado obrigaria a recompilar e reimplantar todo consumidor
+    a cada versao nova da classe do evento — exatamente o acoplamento de
+    compilacao que a arquitetura orientada a eventos existe para eliminar.
+
+    Repare no que NAO esta aqui: spring-boot-starter-web. Um consumidor nao
+    precisa de porta HTTP; ele acorda quando chega evento.
+  -->
+
+  <properties>
+    <java.version>21</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <!--
+      Jackson. Sem o starter-web ele precisa ser declarado. Traz junto o modulo
+      JSR-310, sem o qual o campo Instant do evento nao seria desserializado a
+      partir do texto ISO-8601.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-json</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.kafka</groupId>
+      <artifactId>spring-kafka</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- teste: Kafka embutido + H2. Roda sem Docker e sem o servico-pix. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.kafka</groupId>
+      <artifactId>spring-kafka-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
