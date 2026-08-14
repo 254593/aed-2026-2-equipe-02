@@ -11,7 +11,7 @@ Turma ASDO 11.1 · Prof. Sândalo Bessa
 |---|---|---|
 | _(a preencher)_ | | líder |
 | Allainn Christiam | 1664926 | consumidor de tarifação, infraestrutura, teste de idempotência |
-| Amanda Bouzan | 1665626 | producer pix realizado |
+| Amanda Bouzan | 1665626 | producer para produzir evento de pix realizado |
 
 ## O domínio em uma frase
 
