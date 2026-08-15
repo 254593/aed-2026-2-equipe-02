@@ -60,9 +60,21 @@ class IdempotenciaTest {
     private static final String OCORRIDO_EM = "2026-08-14T13:00:00.000Z";
     private static final String COMPETENCIA = "2026-08";
 
-    private static final String CLIENTE_FRANQUIA_5 = "cli-0001";   // 5 gratis, R$ 1,90
-    private static final String CLIENTE_FRANQUIA_2 = "cli-0002";   // 2 gratis, R$ 3,50
-    private static final String CLIENTE_FRANQUIA_0 = "cli-0003";   // 0 gratis, R$ 0,99
+    /**
+     * Instante fixo na competencia seguinte — usado pelo teste de isolamento por
+     * mes.
+     */
+    private static final String OCORRIDO_EM_SETEMBRO = "2026-09-01T08:00:00.000Z";
+    private static final String COMPETENCIA_SETEMBRO = "2026-09";
+
+    /**
+     * Cliente sem linha na tabela oferta — exercita o plano padrao do repositorio.
+     */
+    private static final String CLIENTE_SEM_OFERTA = "cli-9999";
+
+    private static final String CLIENTE_FRANQUIA_5 = "cli-0001"; // 5 gratis, R$ 1,90
+    private static final String CLIENTE_FRANQUIA_2 = "cli-0002"; // 2 gratis, R$ 3,50
+    private static final String CLIENTE_FRANQUIA_0 = "cli-0003"; // 0 gratis, R$ 0,99
 
     private static final Duration PRAZO = Duration.ofSeconds(20);
     private static final Duration JANELA_DE_OBSERVACAO = Duration.ofSeconds(3);
@@ -106,8 +118,8 @@ class IdempotenciaTest {
         publicar(eventoId, "pix-002", CLIENTE_FRANQUIA_2);
         aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 1);
 
-        publicar(eventoId, "pix-002", CLIENTE_FRANQUIA_2);   // reentrega: mesmo eventoId
-        publicar(eventoId, "pix-002", CLIENTE_FRANQUIA_2);   // e mais uma
+        publicar(eventoId, "pix-002", CLIENTE_FRANQUIA_2); // reentrega: mesmo eventoId
+        publicar(eventoId, "pix-002", CLIENTE_FRANQUIA_2); // e mais uma
 
         confirmarQueNaoMuda(CLIENTE_FRANQUIA_2, 1);
         assertThat(repositorio.contarEventosProcessados()).isEqualTo(1L);
@@ -145,6 +157,79 @@ class IdempotenciaTest {
                 .isEqualByComparingTo("0.99");
     }
 
+    @Test
+    @DisplayName("5 - mensagem sem ce_id usa o eventoId do corpo e continua idempotente")
+    void ceIdAusenteUsaFallbackDoCorpo() {
+        String eventoId = UUID.randomUUID().toString();
+        String json = montarJson(eventoId, "pix-301", CLIENTE_FRANQUIA_5, "");
+
+        // primeira entrega sem o header ce_id
+        enviarSemCeId(json, CLIENTE_FRANQUIA_5);
+        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_5, 1);
+        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_5, COMPETENCIA))
+                .isEqualByComparingTo("0.00");
+
+        // reentrega sem ce_id — mesmo eventoId no corpo; nao deve produzir segundo
+        // efeito
+        enviarSemCeId(json, CLIENTE_FRANQUIA_5);
+        confirmarQueNaoMuda(CLIENTE_FRANQUIA_5, 1);
+        assertThat(repositorio.contarEventosProcessados()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("6 - a competencia e isolada por mes: franquia reinicia em setembro")
+    void competenciaEIsoladaPorMes() {
+        // dois Pix em agosto — dentro da franquia de 2, ambos isentos
+        publicar(UUID.randomUUID().toString(), "pix-401", CLIENTE_FRANQUIA_2);
+        publicar(UUID.randomUUID().toString(), "pix-402", CLIENTE_FRANQUIA_2);
+        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 2);
+        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_2, COMPETENCIA))
+                .isEqualByComparingTo("0.00");
+
+        // um Pix em setembro — competencia nova, franquia reinicia; deve sair isento
+        publicarNaCompetencia(UUID.randomUUID().toString(), "pix-403", CLIENTE_FRANQUIA_2,
+                OCORRIDO_EM_SETEMBRO);
+        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 1, COMPETENCIA_SETEMBRO);
+        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_2, COMPETENCIA_SETEMBRO))
+                .isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    @DisplayName("7 - cliente sem oferta cadastrada recebe o plano padrao (5 gratis, R$ 1,90)")
+    void clienteSemOfertaUsaPlanoPadrao() {
+        // cinco Pix: todos dentro da franquia padrao — isentos
+        for (int i = 1; i <= 5; i++) {
+            publicar(UUID.randomUUID().toString(), "pix-50" + i, CLIENTE_SEM_OFERTA);
+        }
+        aguardarQuantidadeDeTarifas(CLIENTE_SEM_OFERTA, 5);
+        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_SEM_OFERTA, COMPETENCIA))
+                .isEqualByComparingTo("0.00");
+
+        // sexto Pix: acima da franquia padrao — cobrado a R$ 1,90
+        publicar(UUID.randomUUID().toString(), "pix-506", CLIENTE_SEM_OFERTA);
+        aguardarQuantidadeDeTarifas(CLIENTE_SEM_OFERTA, 6);
+        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_SEM_OFERTA, COMPETENCIA))
+                .isEqualByComparingTo("1.90");
+    }
+
+    @Test
+    @DisplayName("8 - dois eventos com mesmo pixId mas eventoId distintos sao processados separadamente")
+    void deduplicacaoUsaEventoIdNaoPixId() {
+        // O mesmo pixId pode aparecer em eventos diferentes (ex.: PixRealizado e depois
+        // PixDevolvido). A chave de deduplicacao e o eventoId, nao o pixId. Se fosse o
+        // pixId, o segundo seria descartado como reentrega do primeiro — erro
+        // documentado
+        // na secao 9 do enunciado.
+        String pixIdCompartilhado = "pix-601";
+
+        publicar(UUID.randomUUID().toString(), pixIdCompartilhado, CLIENTE_FRANQUIA_5);
+        publicar(UUID.randomUUID().toString(), pixIdCompartilhado, CLIENTE_FRANQUIA_5);
+
+        // dois eventos distintos => dois efeitos na tabela tarifa
+        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_5, 2);
+        assertThat(repositorio.contarEventosProcessados()).isEqualTo(2L);
+    }
+
     // ------------------------------------------------------------------
     // apoio
     // ------------------------------------------------------------------
@@ -153,14 +238,29 @@ class IdempotenciaTest {
         enviar(montarJson(eventoId, pixId, clienteId, ""), eventoId, clienteId);
     }
 
+    private void publicarNaCompetencia(String eventoId, String pixId, String clienteId,
+            String ocorridoEm) {
+        String json = montarJsonComInstante(eventoId, pixId, clienteId, ocorridoEm, "");
+        enviar(json, eventoId, clienteId);
+    }
+
     /**
      * O corpo do evento. Os cinco campos depois de valor sao os que o
      * consumidor NAO declara, e estao aqui de proposito.
      */
     private String montarJson(String eventoId, String pixId, String clienteId, String extra) {
+        return montarJsonComInstante(eventoId, pixId, clienteId, OCORRIDO_EM, extra);
+    }
+
+    /**
+     * Variante que aceita um instante arbitrario — necessaria para testar o
+     * isolamento de competencia entre meses distintos.
+     */
+    private String montarJsonComInstante(String eventoId, String pixId, String clienteId,
+            String ocorridoEm, String extra) {
         return "{"
                 + "\"eventoId\":\"" + eventoId + "\","
-                + "\"ocorridoEm\":\"" + OCORRIDO_EM + "\","
+                + "\"ocorridoEm\":\"" + ocorridoEm + "\","
                 + "\"pixId\":\"" + pixId + "\","
                 + "\"clienteId\":\"" + clienteId + "\","
                 + "\"valor\":250.00,"
@@ -183,8 +283,7 @@ class IdempotenciaTest {
      * intermitente.
      */
     private void enviar(String json, String eventoId, String clienteId) {
-        ProducerRecord<String, String> registro =
-                new ProducerRecord<String, String>(TOPICO, clienteId, json);
+        ProducerRecord<String, String> registro = new ProducerRecord<String, String>(TOPICO, clienteId, json);
 
         registro.headers().add("ce_specversion", "1.0".getBytes(UTF_8));
         registro.headers().add("ce_id", eventoId.getBytes(UTF_8));
@@ -196,12 +295,35 @@ class IdempotenciaTest {
         publicador.flush();
     }
 
+    /**
+     * Variante sem o header ce_id — simula um produtor que viole o contrato.
+     * O listener deve acionar o fallback para o eventoId do corpo e logar WARN.
+     */
+    private void enviarSemCeId(String json, String clienteId) {
+        ProducerRecord<String, String> registro = new ProducerRecord<String, String>(TOPICO, clienteId, json);
+
+        registro.headers().add("ce_specversion", "1.0".getBytes(UTF_8));
+        registro.headers().add("ce_source", "/pagamentos/servico-pix".getBytes(UTF_8));
+        registro.headers().add("ce_type", TOPICO.getBytes(UTF_8));
+        registro.headers().add("ce_time", OCORRIDO_EM.getBytes(UTF_8));
+        // ce_id deliberadamente ausente
+
+        publicador.send(registro);
+        publicador.flush();
+    }
+
     private void aguardarQuantidadeDeTarifas(String clienteId, long esperada) {
+        aguardarQuantidadeDeTarifas(clienteId, esperada, COMPETENCIA);
+    }
+
+    /** Sobrecarga que aceita uma competencia arbitraria — necessaria para T6. */
+    private void aguardarQuantidadeDeTarifas(String clienteId, long esperada,
+            String competencia) {
         Awaitility.await()
                 .atMost(PRAZO)
                 .pollInterval(Duration.ofMillis(200))
                 .untilAsserted(() -> assertThat(
-                        repositorio.contarPixNaCompetencia(clienteId, COMPETENCIA))
+                        repositorio.contarPixNaCompetencia(clienteId, competencia))
                         .isEqualTo(esperada));
     }
 
