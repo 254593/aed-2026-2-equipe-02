@@ -3,23 +3,37 @@
 Projeto incremental em equipe — **AED · Arquitetura Reativa e Event-Driven · PUC Minas / IEC**
 Turma ASDO 11.1 · Prof. Sândalo Bessa
 
-<!-- TODO EQUIPE: preencher líder, integrantes e o domínio em uma frase (secao 2.3 do enunciado). -->
-
 ## Equipe
+
+Equipe 02 · líder: **Evandro V. Junior**
 
 | Integrante | Matrícula | Papel nesta etapa |
 |---|---|---|
-| _(a preencher)_ | | líder |
+| Evandro V. Junior | 1050413 | líder · ADR-002 e decisão do domínio |
 | Allainn Christiam | 1664926 | consumidor de tarifação, infraestrutura, teste de idempotência |
-| Amanda Bouzan | 1665626 | producer para produzir evento de pix realizado |
+| Amanda Bouzan | 1665626 | publicador do evento de Pix realizado |
 | Alexsander da Silva | 1125713 | testes automatizados adicionais do consumidor |
+| _(a preencher)_ | | |
+| _(a preencher)_ | | |
+| _(a preencher)_ | | |
+
+<!--
+RASCUNHO — três coisas para a equipe conferir antes da tag:
+  1. faltam os três integrantes restantes (a turma organiza equipes de sete);
+  2. líder inferido de quem criou o repositório; confirmar;
+  3. a matrícula do Evandro veio do e-mail dos commits (1050413), mas a conta do
+     GitHub é 254593. O enunciado (secao 2.2) exige NOME DE USUARIO = MATRICULA,
+     e o checklist item 17 confere isso na aba Contributors. Vale alinhar as duas.
+-->
 
 ## O domínio em uma frase
 
-<!-- TODO EQUIPE: alinhar com docs/adr/ADR-002-dominio-do-projeto.md -->
+Tarifação de Pix de contas PJ: cada Pix liquidado é confrontado com a oferta comercial vigente da
+empresa e sai isento, enquanto couber na franquia mensal do plano, ou tarifado a partir do primeiro
+excedente — e empresa sem contrato vigente não é cobrada.
 
-Tarifação de Pix: cada cliente tem uma franquia de Pix gratuitos por mês, e o Pix que excede a
-franquia é tarifado pelo valor do plano contratado.
+O processo completo, os quatro critérios e as consequências aceitas estão em
+[docs/adr/ADR-002-dominio-do-projeto.md](docs/adr/ADR-002-dominio-do-projeto.md).
 
 ---
 
@@ -70,7 +84,8 @@ resolve sozinho em 5 segundos.
 
 ## Passo 3 — o publicador (servico-pix)
 
-<!-- TODO: ajustar quando o servico-pix estiver no repositório. -->
+Expõe HTTP na porta 8080 e cria o tópico com 3 partições na subida. **Numa outra aba**, com o
+consumidor já rodando:
 
 ```bash
 mvn -f servico-pix/pom.xml spring-boot:run
@@ -80,8 +95,15 @@ mvn -f servico-pix/pom.xml spring-boot:run
 
 ```bash
 curl.exe -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:8080/pix/realizados \
-     -H "Content-Type: application/json" -d "@pix/pix-exemplo.json"
+     -H "Content-Type: application/json" -d "@servico-pix/pix-exemplo.json"
 ```
+
+A requisição leva um `RealizacaoPixVO` (o pedido); a resposta devolve o `PixRealizadoEvent` (o
+fato), já com o `eventoId` sorteado e o `ocorridoEm` em ISO-8601. Campo obrigatório faltando ou
+valor menor ou igual a zero responde **400** com o motivo no corpo.
+
+Para gastar a franquia, repita o comando trocando o `pixId` — o `eventoId` é sorteado a cada
+chamada, então cada requisição é um fato novo.
 
 A resposta é **202 Accepted**, não 200: no instante da resposta o Pix ainda não foi tarifado.
 
@@ -99,18 +121,26 @@ publicação.
 
 ## Passo 5 — conferir o resultado
 
-**No banco** — a franquia de `cli-0001` é de 5 Pix por mês, a R$ 1,90 o excedente:
+**No banco** — `cli-0001` tem 5 Pix isentos por mês; acima disso a tarifa vem da faixa do valor
+(até R$ 500 → R$ 1,90):
 
 ```bash
-docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT pix_id, competencia, valor FROM tarifa ORDER BY ocorrido_em;"
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT pix_id, competencia, situacao, valor FROM tarifa ORDER BY ocorrido_em;"
 ```
 
 ```
-  pix_id   | competencia | valor
------------+-------------+-------
- pix-e2e-1 | 2026-08     |  0.00
+  pix_id   | competencia |    situacao     | valor
+-----------+-------------+-----------------+-------
+ pix-e2e-1 | 2026-08     | ISENTO_FRANQUIA |  0.00
  ...
- pix-e2e-6 | 2026-08     |  1.90     <- o sexto excede a franquia
+ pix-e2e-6 | 2026-08     | TARIFADO        |  1.90   <- o sexto excede a franquia
+```
+
+A coluna `situacao` é o que distingue as três saídas que valem zero. Trocando o `clienteId` para
+`cli-9999` — que não tem contrato — a linha sai como `SEM_CONTRATO`, e **não** cobrada:
+
+```bash
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT situacao, count(*), sum(valor) FROM tarifa GROUP BY situacao;"
 ```
 
 **O lag do grupo** — deve zerar depois que o consumidor processa:
@@ -133,8 +163,15 @@ Roda com Kafka embutido e H2 — **sem Docker e sem o `servico-pix`**:
 mvn -f servico-tarifacao/pom.xml test
 ```
 
-Quatro cenários: Pix isento dentro da franquia · **o mesmo evento entregue 3x tarifa 1x** · o Pix
-seguinte ao fim da franquia é tarifado · campos que o consumidor não declara são ignorados.
+Doze cenários, cobrindo a idempotência e as quatro saídas da política do ADR-002: **o mesmo evento
+entregue 3x produz efeito 1x** · consumidor tolerante a campos desconhecidos · `ce_id` ausente ·
+mesmo `pixId` com `eventoId` distintos · isenção por franquia · tarifação pela faixa de valor ·
+cliente sem contrato não é cobrado · contrato encerrado · troca de plano respeitando a competência
+do evento · teto mensal · isolamento por competência. A tabela completa está em
+[servico-tarifacao/README.md](servico-tarifacao/README.md#rodar).
+
+O `servico-pix` tem a própria bateria (`mvn -f servico-pix/pom.xml test`): ISO-8601 no fio, tópico
+com 3 partições, 202 e 400 no controlador, e o contrato que o consumidor espera.
 
 ## Derrubar tudo
 

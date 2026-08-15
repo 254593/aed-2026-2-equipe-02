@@ -13,7 +13,7 @@ recusa é indício de que a ferramenta decidiu no lugar da equipe.
 
 ### Allainn Christiam (1664926) — consumidor de tarifação, infraestrutura e teste
 
-Ferramenta: Claude Code (Claude Opus). Interações de 14/08/2026.
+Ferramenta: Claude Code (Claude Opus). Interações de 14 e 15/08/2026.
 
 ---
 
@@ -121,6 +121,53 @@ arquivo não retornou nenhuma ocorrência ligada a esta entrega. Usar conteúdo 
 fundamento arquitetural teria introduzido vocabulário e critérios que o enunciado não pede. O
 material que de fato faltava foi identificado e pedido: a **Seção 12 das Notas de Aula da Aula
 02**, que o enunciado cita como fonte do padrão completo de pacotes.
+
+---
+
+#### 6. O plano padrão para cliente sem contrato — a recusa que mudou o código
+
+**Pedido** (15/08, depois que o ADR-002 subiu). Conferir se o consumidor atende o que o ADR
+decidiu sobre o fluxo *tarifar*, e alinhar o que estivesse divergente.
+
+**Sugerido, na véspera.** Ao escrever o `TarifacaoRepository` em 14/08, a ferramenta propôs — e a
+equipe aceitou sem confrontar com o domínio — um plano padrão para cliente sem linha na tabela
+`oferta`: 5 Pix grátis e R$ 1,90 de tarifa, com a justificativa de que "um Pix de cliente
+desconhecido não pode derrubar o consumidor e travar a partição". O argumento é bom de
+disponibilidade, e passou despercebido por isso.
+
+**RECUSADO — o plano padrão inteiro.** Razão técnica: o ADR-002 decide o oposto, e por um motivo
+que não é de arquitetura. *"Empresa sem contrato de tarifação vigente na data de competência não é
+cobrada. Não há tabela padrão de fallback; cobrar sem contrato é cobrança indevida, com exposição
+a devolução em dobro (CDC, art. 42, parágrafo único)."* O fallback transformava um erro de
+cadastro numa **cobrança indevida ao cliente** — e o pior é que funcionava: não derrubava nada, os
+testes passavam, e o defeito só apareceria na fatura de alguém. A preocupação com a partição
+travada é legítima, mas a resposta certa a ela é registrar o Pix com situação `SEM_CONTRATO` e
+valor zero, não inventar um contrato que ninguém assinou.
+
+**Também recusado — corrigir o ADR em vez do código.** Era a saída barata: apagar do ADR a frase
+sobre não haver fallback e deixar o código como estava. Recusada porque aquela frase é a regra que
+sustenta o recorte do domínio; removê-la para acomodar uma implementação apressada é escolher o
+domínio de trás para a frente, exatamente o que o enunciado adverte na Parte A.
+
+**Aceito.** Alinhar o código ao ADR, e não o contrário:
+
+- `SEM_CONTRATO` como quarta saída da política, com valor zero e **sem consumir franquia**;
+- a coluna `situacao` em `tarifa`, porque três das quatro saídas valem `0.00` e significam coisas
+  diferentes — sem ela o extrato ficaria ambíguo justamente onde a auditoria precisa de clareza;
+- a oferta passou a ter **vigência**, e a busca é pela vigente *na competência do evento*. O ADR
+  diz "vigente" duas vezes, e sem isso um replay de agosto feito em outubro encontraria o contrato
+  errado — o fechamento mensal, que é o quarto critério do domínio, deixaria de ser reproduzível;
+- as outras duas saídas que o ADR declara e o código não tinha: **tarifação por faixa de valor** e
+  **teto mensal atingido**. É o "aprova, recusa e limita" do critério 1.
+
+**Efeito colateral, e ele importa.** Um teste automatizado já verde — o `cli-9999` recebendo
+R$ 1,90 no sexto Pix — estava *provando o comportamento errado*. Foi reescrito como
+`clienteSemContratoNaoECobrado`. Um teste que passa não é evidência de que a regra está certa: é
+evidência de que o código faz o que o teste diz, e aquele teste tinha sido escrito a partir do
+código, não a partir do ADR.
+
+*Onde isso aparece:* `SituacaoDaTarifaVO`, `DecisaoDeTarifacaoVO`, `FaixaDeTarifaVO`, o
+`buscarOfertaVigente` do repositório e os testes 7 a 11 do `IdempotenciaTest`.
 
 ---
 

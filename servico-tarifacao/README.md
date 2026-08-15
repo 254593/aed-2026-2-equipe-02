@@ -13,8 +13,15 @@ Responsável: **Allainn Christiam (1664926)**.
 
 ## A regra de negócio
 
-Cada cliente tem um **plano** (tabela `oferta`) que diz duas coisas: quantos Pix ele faz de graça
-por mês, e quanto custa cada Pix a partir daí.
+É a **`PoliticaDeTarifacao`** do [ADR-002](../docs/adr/ADR-002-dominio-do-projeto.md). Para cada
+Pix ela decide entre **quatro** saídas — aprova, recusa e limita:
+
+| Situação | Valor | Consome franquia? | Quando |
+|---|---|---|---|
+| `SEM_CONTRATO` | `0.00` | não | não há oferta vigente na competência |
+| `ISENTO_FRANQUIA` | `0.00` | **sim** | consumo do mês < franquia do plano |
+| `TARIFADO` | faixa | **sim** | acima da franquia; o preço vem da faixa do valor |
+| `TETO_ATINGIDO` | `0.00` | não | o gasto do mês já atingiu o teto do plano |
 
 ```
 Pix chega
@@ -23,11 +30,13 @@ já vi este eventoId?  ──sim──▶  descarta em silêncio, não faz nada
    ↓ não
 qual a competência?  →  mês do ocorridoEm DO EVENTO (não de now())
    ↓
-quantos Pix este cliente já fez nesta competência?
-   ↓
-consumo < franquia ?  ──sim──▶  valor = 0.00   (isento, mas CONSOME a franquia)
+há oferta vigente NESSA competência?  ──não──▶  SEM_CONTRATO, 0.00
+   ↓ sim
+franquia consumida < pix_gratuitos_mes ?  ──sim──▶  ISENTO_FRANQUIA, 0.00
    ↓ não
-valor = valor_tarifa do plano
+plano tem teto e já foi atingido ?  ──sim──▶  TETO_ATINGIDO, 0.00
+   ↓ não
+TARIFADO, valor = a faixa que cobre o valor do Pix
    ↓
 grava a linha em `tarifa`  (mesma transação do registro da deduplicação)
    ↓
@@ -36,24 +45,46 @@ commit
 ack do offset
 ```
 
-Exemplo com o cliente `cli-0001`, que tem franquia 5 e tarifa R$ 1,90:
+**A ordem das perguntas não é arbitrária.** Sem contrato não se pergunta pela franquia, e o teto
+só faz sentido depois de saber que haveria cobrança — inverter as duas últimas faria um Pix isento
+"atingir o teto" e sair com a situação errada no extrato.
 
-| Pix | consumo antes | resultado |
-|---|---|---|
-| 1º ao 5º | 0, 1, 2, 3, 4 | `0.00` — isento |
-| 6º | 5 | **`1.90`** |
-| 7º em diante | 6, 7, ... | `1.90` cada |
+### Por que a situação é uma coluna, e não só o valor
 
-Clientes de exemplo já cadastrados (dados fictícios, em `schema.sql`):
+Três das quatro saídas valem `0.00` e significam coisas diferentes. Sem a coluna `situacao`, um
+Pix isento por franquia, um de empresa sem contrato e um acima do teto seriam indistinguíveis no
+extrato — justamente onde a auditoria e a contestação comercial precisam de clareza. E a contagem
+de franquia depende disso: `SEM_CONTRATO` e `TETO_ATINGIDO` não gastam cota.
 
-| cliente_id | pix_gratuitos_mes | valor_tarifa |
-|---|---|---|
-| `cli-0001` | 5 | 1.90 |
-| `cli-0002` | 2 | 3.50 |
-| `cli-0003` | 0 | 0.99 |
+### Não existe plano padrão
 
-Cliente sem linha em `oferta` recebe o plano padrão do `TarifacaoRepository` (5 grátis, R$ 1,90)
-em vez de derrubar o consumidor — um Pix de cliente desconhecido não pode travar a partição.
+Cliente sem oferta vigente na competência **não é cobrado**. O Pix vira linha — o fato aconteceu e
+precisa aparecer na auditoria — com situação `SEM_CONTRATO` e valor zero.
+
+Não há tabela de fallback, e a razão está no ADR-002: cobrar sem contrato vigente é cobrança
+indevida, com exposição a devolução em dobro (CDC, art. 42, parágrafo único). Um plano padrão
+"para não travar a partição" transformaria um erro de cadastro numa cobrança ao cliente.
+
+### A oferta tem vigência
+
+A busca é pela oferta vigente **na competência do evento**, nunca "a atual". Um replay feito em
+outubro precisa reencontrar o contrato que vigia em agosto e chegar ao mesmo valor de antes — é o
+que torna o fechamento mensal reproduzível, o quarto critério do ADR.
+
+### Clientes de exemplo (dados fictícios, em `schema.sql`)
+
+| cliente_id | vigência | grátis/mês | faixas | teto |
+|---|---|---|---|---|
+| `cli-0001` | 2026-01 → aberta | 5 | ≤500: 1,90 · ≤5000: 3,50 · acima: 7,00 | — |
+| `cli-0002` | 2026-01 → aberta | 2 | única: 3,50 | — |
+| `cli-0003` | 2026-01 → aberta | 0 | única: 0,99 | — |
+| `cli-0004` | 2026-01 → 2026-07 | 2 | única: 4,90 | — |
+| `cli-0004` | 2026-08 → aberta | 10 | única: 2,50 | — |
+| `cli-0005` | 2026-01 → **2026-07** | 5 | única: 1,90 | — |
+| `cli-0006` | 2026-01 → aberta | 0 | única: 0,99 | **1,98** |
+
+`cli-0004` demonstra troca de plano; `cli-0005`, contrato encerrado sem sucessora; `cli-0006`, o
+teto mensal. Qualquer outro `clienteId` cai em `SEM_CONTRATO`.
 
 ---
 
@@ -140,8 +171,8 @@ do contrato.
 | `eventoId` | sim (rede de segurança) | identidade do **fato**; distinto do `pixId` |
 | `ocorridoEm` | **sim** | define a competência. ISO-8601, **nunca epoch** |
 | `pixId` | sim | identidade da **transação**; vai para o registro da tarifa |
-| `clienteId` | **sim** | de quem é a franquia |
-| `valor` | grava, não calcula | a tarifa é fixa por plano, não percentual |
+| `clienteId` | **sim** | de quem é a franquia, e a chave de partição |
+| `valor` | **sim** | escolhe a faixa de tarifa do plano |
 | `chavePix`, `tipoChave`, `bancoDestino`, `endToEndId`, `pagadorNome` | **não** | ignorados de propósito |
 
 Os cinco últimos existem **para serem ignorados**: é a demonstração do consumidor tolerante que o
@@ -185,16 +216,25 @@ tarifado — o consumidor pode nem estar rodando. 202 é honesto sobre a consist
 
 ```
 src/main/java/br/pucminas/aed/tarifacao/
-├── TarifacaoApplication.java          raiz
-├── controller/TarifacaoListener.java  adaptador de entrada
-├── domain/PixRealizadoEvent.java      o fato, como ESTE serviço o enxerga
-├── domain/OfertaVO.java               o plano do cliente
+├── TarifacaoApplication.java             raiz
+├── controller/TarifacaoListener.java     adaptador de entrada
+├── domain/
+│   ├── PixRealizadoEvent.java            o fato, como ESTE serviço o enxerga
+│   ├── OfertaVO.java                     o contrato vigente do cliente
+│   ├── FaixaDeTarifaVO.java              até tanto de valor, custa tanto
+│   ├── SituacaoDaTarifaVO.java           as quatro saídas da política
+│   └── DecisaoDeTarifacaoVO.java         o que a política decidiu: situação + valor
 └── service/
-    ├── TarifacaoService.java          a regra + a transação
-    └── TarifacaoRepository.java       as três tabelas
+    ├── TarifacaoService.java             a política + a transação
+    └── TarifacaoRepository.java          as quatro tabelas
 ```
 
-Quatro pacotes, nenhum a mais. `domain` não importa nada de Kafka nem de Spring.
+Quatro pacotes, nenhum a mais. `domain` não importa nada de Kafka nem de Spring — só a biblioteca
+padrão e as anotações de serialização.
+
+Todo sufixo está na lista fechada da Seção 12. `SituacaoDaTarifaVO` é um enum, e leva `VO` porque
+é exatamente isso: valor sem identidade própria, imutável, que só faz sentido junto da tarifa que
+o carrega.
 
 ### As duas linhas que são o assunto da aula
 
@@ -211,13 +251,14 @@ e o efeito não teria acontecido. Confirmar depois de processar é o que caracte
 `@Transactional` está no `TarifacaoService`, nunca no listener. Se a transação começasse no
 listener, o `ack` estaria dentro dela e o raciocínio acima cairia.
 
-### As três tabelas
+### As quatro tabelas
 
 | Tabela | Papel |
 |---|---|
 | `evento_processado` | memória do que já foi visto. PK = `evento_id`. Sustenta a idempotência |
-| `oferta` | o plano do cliente — a regra que decide isenção |
-| `tarifa` | o efeito de negócio. Uma linha por Pix, com `valor = 0.00` quando isento |
+| `oferta` | o contrato vigente do cliente, com vigência por competência e teto mensal |
+| `oferta_faixa` | o preço por faixa de valor daquele contrato |
+| `tarifa` | o efeito de negócio. Uma linha por Pix, com `situacao` e `valor` |
 
 A deduplicação e o efeito acontecem na **mesma transação**. Em transações separadas existe uma
 janela em que o processo morre entre as duas e o evento é reprocessado — exatamente o que se
@@ -227,10 +268,11 @@ queria evitar.
 podem falar do mesmo Pix — um `PixRealizado` hoje e um `PixDevolvido` amanhã. Deduplicar pela
 entidade descartaria o segundo como se fosse repetição do primeiro.
 
-**Por que o Pix isento também vira linha:** ele consome franquia. Guardando isento e tarifado na
-mesma tabela, a contagem sai da própria `tarifa` — sem contador em coluna separada, que seria um
-`UPDATE` em delta, o tipo de operação que a reentrega quebra. De brinde, o extrato mensal do
-cliente fica completo e reprocessável.
+**Por que todo Pix vira linha, cobrado ou não:** o isento consome franquia, e a contagem sai da
+própria `tarifa` — sem contador em coluna separada, que seria um `UPDATE` em delta, o tipo de
+operação que a reentrega quebra. Os não cobrados (`SEM_CONTRATO`, `TETO_ATINGIDO`) entram porque
+são fatos que a auditoria precisa ver; a coluna `situacao` é o que os mantém fora da contagem de
+franquia. De brinde, o extrato mensal do cliente fica completo e reprocessável.
 
 **Retenção:** `evento_processado` cresce para sempre e precisa de expurgo, com janela **maior**
 que a retenção do tópico. Se for menor, um replay de mensagem antiga encontra a tabela limpa e
@@ -254,19 +296,31 @@ virada do mês cairia em competências diferentes conforme onde o consumidor rod
 
 ```bash
 mvn spring-boot:run     # precisa do docker compose up -d na raiz
-mvn test                # 4 testes, sem Docker e sem o servico-pix
+mvn test                # 12 testes, sem Docker e sem o servico-pix
 ```
 
 O teste publica **JSON cru** no tópico, não objeto Java — assim ele exercita o contrato do fio,
 como faria um produtor escrito em outra linguagem. Se o `servico-pix` mudar o formato, é este
 teste que precisa quebrar.
 
+Nenhum `Instant.now()` em lugar nenhum: cada evento carrega um `ocorridoEm` fixo, e é dele que sai
+a competência. Um teste que dependesse do relógio falharia na virada do mês e, pior, esconderia
+justamente o bug que os testes 8 e 9 existem para pegar.
+
 | Teste | O que prova |
 |---|---|
 | 1 | Pix dentro da franquia é registrado como isento |
-| 2 | **o mesmo evento entregue 3x tarifa uma só vez** — o item obrigatório do B.3 |
+| 2 | **o mesmo evento entregue 3x produz efeito uma só vez** — o item obrigatório do B.3 |
 | 3 | o Pix seguinte ao fim da franquia é tarifado |
 | 4 | campos que o consumidor não declara são ignorados |
+| 5 | mensagem sem `ce_id` cai no `eventoId` do corpo e continua idempotente |
+| 6 | mesmo `pixId` com `eventoId` distintos são dois fatos, não reentrega |
+| 7 | cliente que nunca teve contrato não é cobrado, e não consome franquia |
+| 8 | contrato encerrado: cobre em julho, `SEM_CONTRATO` em agosto |
+| 9 | troca de plano: vale a oferta vigente na competência **do evento** |
+| 10 | acima da franquia, o **valor** do Pix escolhe a faixa da tarifa |
+| 11 | atingido o teto mensal, os Pix seguintes deixam de ser cobrados |
+| 12 | a competência é isolada por mês: a franquia reinicia em setembro |
 
 ## Configuração relevante
 

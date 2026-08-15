@@ -11,7 +11,8 @@
 | ADR-002: decisão do domínio (tarifação de Pix) | equipe |
 | `servico-tarifacao` — consumidor Kafka com idempotência | Allainn Christiam |
 | `servico-pix` — publisher com envelope CloudEvents 1.0 | Amanda Bouzan |
-| Testes automatizados adicionais do consumidor (T5–T8) | Alexsander da Silva |
+| Testes de robustez do listener no consumidor (T5, T6, T12) | Alexsander da Silva |
+| As quatro saídas da política de tarifação do ADR (T7–T11) | Allainn Christiam |
 | Testes automatizados do publisher — validação e contrato (T2–T8) | Alexsander da Silva |
 | Infraestrutura Docker Compose (Kafka, Postgres, Kafka UI) | Allainn Christiam |
 
@@ -71,23 +72,36 @@ O arquivo de testes é
 Roda com Kafka embutido e H2 — sem Docker e sem o `servico-pix`.
 As mensagens são publicadas como JSON cru para exercitar o contrato do fio, não a classe Java.
 
-### Testes originais (Allainn Christiam)
+### Idempotência e contrato (Allainn Christiam)
 
 | # | Método | O que valida |
 |---|---|---|
-| 1 | `pixDentroDaFranquiaSaiIsento` | Pix dentro da franquia é registrado com valor 0,00 |
-| 2 | `reentregaNaoDuplicaOEfeito` | O mesmo evento entregue 3× gera efeito 1× (idempotência core) |
-| 3 | `pixAcimaDaFranquiaEhTarifado` | O Pix seguinte ao fim da franquia é cobrado pelo valor do plano |
+| 1 | `pixDentroDaFranquiaSaiIsento` | Pix dentro da franquia é registrado com valor 0,00 e situação `ISENTO_FRANQUIA` |
+| 2 | `reentregaNaoDuplicaOEfeito` | O mesmo evento entregue 3× gera efeito 1× — o item obrigatório do B.3 |
+| 3 | `pixAcimaDaFranquiaETarifado` | O Pix seguinte ao fim da franquia é cobrado |
 | 4 | `consumidorTolerante` | Campos que o consumidor não declara são ignorados sem erro |
 
-### Testes adicionais (Alexsander da Silva)
+### Robustez do listener (Alexsander da Silva)
 
 | # | Método | O que valida |
 |---|---|---|
-| 5 | `ceIdAusenteUsaFallbackDoCorpo` | Quando o header `ce_id` está ausente o listener cai no fallback para o `eventoId` do corpo, processa normalmente e ainda deduplica na reentrega |
-| 6 | `competenciaEIsoladaPorMes` | A franquia de agosto não contamina setembro: a competência vem do campo `ocorridoEm` do evento, nunca do relógio da máquina |
-| 7 | `clienteSemOfertaUsaPlanoPadrao` | Cliente sem linha na tabela `oferta` recebe o plano padrão (5 grátis, R$ 1,90) — cliente desconhecido não derruba o consumidor |
-| 8 | `deduplicacaoUsaEventoIdNaoPixId` | Dois eventos com `eventoId` distintos e mesmo `pixId` geram dois efeitos — a chave de deduplicação é a identidade do fato, não a da entidade de negócio |
+| 5 | `ceIdAusenteUsaFallbackDoCorpo` | Sem o header `ce_id` o listener cai no `eventoId` do corpo, registra `WARN` e ainda deduplica na reentrega |
+| 6 | `deduplicacaoUsaEventoIdNaoPixId` | Dois eventos com `eventoId` distintos e mesmo `pixId` geram dois efeitos — a chave de deduplicação é a identidade do fato, não a da entidade |
+| 12 | `competenciaEIsoladaPorMes` | A franquia de agosto não contamina setembro: a competência vem do `ocorridoEm` do evento, nunca do relógio |
+
+### As quatro saídas da política do ADR-002 (Allainn Christiam)
+
+Acrescentados em 15/08, ao confrontar o consumidor com o ADR. O ponto de decisão que o ADR declara
+— *isentar, tarifar por faixa de valor, não cobrar por teto atingido*, mais a regra de que empresa
+sem contrato vigente não é cobrada — só estava implementado pela metade.
+
+| # | Método | O que valida |
+|---|---|---|
+| 7 | `clienteSemContratoNaoECobrado` | Cliente sem contrato vira linha `SEM_CONTRATO` com valor 0,00 e **não consome franquia**. Substitui um teste anterior que exigia o oposto (plano padrão de R$ 1,90) e contradizia o ADR — ver [IA.md](../IA.md), interação 6 |
+| 8 | `contratoEncerradoDeixaDeSerCobrado` | O mesmo cliente é cobrado em julho, quando havia contrato, e sai `SEM_CONTRATO` em agosto, quando não há |
+| 9 | `ofertaEBuscadaPelaCompetenciaDoEvento` | Troca de plano: um evento de julho reprocessado hoje reencontra o plano **de julho**. É o que torna o fechamento mensal reproduzível |
+| 10 | `tarifaVemDaFaixaDoValor` | Acima da franquia, o valor do Pix escolhe a faixa: R$ 1,90 / R$ 3,50 / R$ 7,00 |
+| 11 | `tetoMensalInterrompeACobranca` | Atingido o teto de gasto do mês, os Pix seguintes saem `TETO_ATINGIDO` com valor 0,00 |
 
 ---
 

@@ -84,7 +84,7 @@ consomem o nosso resultado. A devolução de Pix e o MED: são fato de negócio 
 próprio, e não compensação desta saga. E Pix de contas PF, que tem regra de gratuidade distinta.
 
 **O que vai ficar difícil na aula 04.** A franquia mensal é um contador por empresa, e contador
-exige ordenação: particionamos por `idEmpresa`, o que limita a vazão ao número de partições e
+exige ordenação: particionamos por `clienteId`, o que limita a vazão ao número de partições e
 transforma uma empresa de altíssimo volume em *hot partition* que não acelera com mais instâncias.
 Mitigação: publicamos com essa chave desde a aula 02 e vamos monitorar o lag da maior partição
 contra a mediana; se a hot partition aparecer, a saída é tornar o consumo de franquia comutativo
