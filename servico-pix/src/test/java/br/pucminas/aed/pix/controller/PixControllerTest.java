@@ -1,13 +1,12 @@
 package br.pucminas.aed.pix.controller;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import org.springframework.http.ResponseEntity;
 
 import br.pucminas.aed.pix.domain.PixRealizadoEvent;
@@ -36,5 +35,20 @@ class PixControllerTest {
         assertThat(resposta.getStatusCode().value()).isEqualTo(202);
         assertThat(resposta.getBody()).isSameAs(evento);
     }
-}
 
+    @Test
+    @org.junit.jupiter.api.DisplayName("responde 400 com corpo JSON quando entrada e invalida")
+    void responde400QuandoEntradaEhInvalida() {
+        PixService pixService = mock(PixService.class);
+        PixController controller = new PixController(pixService);
+
+        ResponseEntity<?> resposta = controller.tratarEntradaInvalida(
+                new IllegalArgumentException("pixId e obrigatorio"));
+
+        assertThat(resposta.getStatusCode().value()).isEqualTo(400);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, String> corpo = (java.util.Map<String, String>) resposta.getBody();
+        assertThat(corpo).containsKey("erro");
+        assertThat(corpo.get("erro")).isEqualTo("pixId e obrigatorio");
+    }
+}

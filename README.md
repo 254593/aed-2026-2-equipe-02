@@ -133,11 +133,8 @@ Roda com Kafka embutido e H2 — **sem Docker e sem o `servico-pix`**:
 mvn -f servico-tarifacao/pom.xml test
 ```
 
-```bash
-mvn -f servico-tarifacao/pom.xml test
-```
-
-Nove cenários: Pix isento dentro da franquia · **o mesmo evento entregue 3x tarifa 1x** · Pix acima da franquia é tarifado · campos desconhecidos ignorados (consumidor tolerante) · fallback para `eventoId` do corpo quando `ce_id` está ausente · franquia isolada por competência (mês) · cliente sem oferta usa plano padrão · deduplicação usa `eventoId`, não `pixId`.
+Quatro cenários: Pix isento dentro da franquia · **o mesmo evento entregue 3x tarifa 1x** · o Pix
+seguinte ao fim da franquia é tarifado · campos que o consumidor não declara são ignorados.
 
 ## Derrubar tudo
 

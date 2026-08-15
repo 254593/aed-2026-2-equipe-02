@@ -12,6 +12,7 @@
 | `servico-tarifacao` — consumidor Kafka com idempotência | Allainn Christiam |
 | `servico-pix` — publisher com envelope CloudEvents 1.0 | Amanda Bouzan |
 | Testes automatizados adicionais do consumidor (T5–T8) | Alexsander da Silva |
+| Testes automatizados do publisher — validação e contrato (T2–T8) | Alexsander da Silva |
 | Infraestrutura Docker Compose (Kafka, Postgres, Kafka UI) | Allainn Christiam |
 
 ---
@@ -49,10 +50,16 @@ mvn -f servico-tarifacao/pom.xml spring-boot:run
 mvn -f servico-pix/pom.xml spring-boot:run
 ```
 
-### Testes automatizados (sem Docker, sem servico-pix)
+### Testes automatizados — consumidor (sem Docker, sem servico-pix)
 
 ```bash
 mvn -f servico-tarifacao/pom.xml test
+```
+
+### Testes automatizados — publisher
+
+```bash
+mvn -f servico-pix/pom.xml test
 ```
 
 ---
@@ -81,3 +88,33 @@ As mensagens são publicadas como JSON cru para exercitar o contrato do fio, nã
 | 6 | `competenciaEIsoladaPorMes` | A franquia de agosto não contamina setembro: a competência vem do campo `ocorridoEm` do evento, nunca do relógio da máquina |
 | 7 | `clienteSemOfertaUsaPlanoPadrao` | Cliente sem linha na tabela `oferta` recebe o plano padrão (5 grátis, R$ 1,90) — cliente desconhecido não derruba o consumidor |
 | 8 | `deduplicacaoUsaEventoIdNaoPixId` | Dois eventos com `eventoId` distintos e mesmo `pixId` geram dois efeitos — a chave de deduplicação é a identidade do fato, não a da entidade de negócio |
+
+---
+
+## Testes do publisher (`servico-pix`)
+
+Arquivos:
+- [`servico-pix/src/test/.../KafkaConfigTest.java`](../../servico-pix/src/test/java/br/pucminas/aed/pix/KafkaConfigTest.java)
+- [`servico-pix/src/test/.../service/PixServiceTest.java`](../../servico-pix/src/test/java/br/pucminas/aed/pix/service/PixServiceTest.java)
+- [`servico-pix/src/test/.../controller/PixControllerTest.java`](../../servico-pix/src/test/java/br/pucminas/aed/pix/controller/PixControllerTest.java)
+
+### Testes originais (Amanda Bouzan)
+
+| Arquivo | Método | O que valida |
+|---|---|---|
+| `KafkaConfigTest` | `serializaDataEmIso8601ENaoEmEpoch` | `ObjectMapper` serializa `ocorridoEm` como ISO-8601, nunca como epoch |
+| `KafkaConfigTest` | `declaraTopicoComTresParticoes` | Tópico criado com 3 partições |
+| `PixServiceTest` | `publicaContratoEsperadoPeloConsumidor` | Tópico correto, chave de partição = `clienteId`, os 5 headers `ce_*` obrigatórios, `ce_id` = `eventoId` do evento |
+| `PixControllerTest` | `responde202QuandoPublicacaoEConfiadaAoKafka` | Controller retorna 202 quando a publicação é delegada ao Kafka |
+
+### Testes adicionais (Alexsander da Silva)
+
+| Arquivo | Método | O que valida |
+|---|---|---|
+| `PixServiceTest` | `lancaExcecaoQuandoRealizacaoENula` | `realizar(null)` lança `IllegalArgumentException` antes de qualquer publicação |
+| `PixServiceTest` | `lancaExcecaoQuandoPixIdEmBranco` | `pixId` vazio lança exceção |
+| `PixServiceTest` | `lancaExcecaoQuandoClienteIdEmBranco` | `clienteId` vazio lança exceção |
+| `PixServiceTest` | `lancaExcecaoQuandoValorEZero` | `valor = 0` é rejeitado (só valor > 0 é aceito) |
+| `PixServiceTest` | `lancaExcecaoQuandoValorENegativo` | `valor < 0` é rejeitado |
+| `PixServiceTest` | `eventoIdUnicoACadaChamada` | Dois `realizar()` com mesmo payload geram `eventoId` distintos — cada fato tem identidade própria |
+| `PixControllerTest` | `responde400QuandoEntradaEhInvalida` | `@ExceptionHandler` retorna `400 Bad Request` com corpo `{"erro": "..."}` quando a validação falha |
