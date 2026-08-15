@@ -2,41 +2,38 @@ package br.pucminas.aed.tarifacao.service;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import br.pucminas.aed.tarifacao.domain.DecisaoDeTarifacaoVO;
+import br.pucminas.aed.tarifacao.domain.FaixaDeTarifaVO;
 import br.pucminas.aed.tarifacao.domain.OfertaVO;
 import br.pucminas.aed.tarifacao.domain.PixRealizadoEvent;
+import br.pucminas.aed.tarifacao.domain.SituacaoDaTarifaVO;
 
 /**
- * Toda a persistencia do servico, num lugar so. Sao tres tabelas com papeis bem
- * distintos:
+ * Toda a persistencia do servico, num lugar so. Sao quatro tabelas com papeis
+ * bem distintos:
  *
  *   evento_processado  memoria do que ja foi visto — sustenta a IDEMPOTENCIA
- *   oferta             o plano do cliente — a REGRA que decide isencao
+ *   oferta             o contrato vigente do cliente — a REGRA que decide
+ *   oferta_faixa       o preco por faixa de valor daquele contrato
  *   tarifa             o efeito de negocio — o que nao pode acontecer 2 vezes
  *
- * As tres moram na mesma classe porque duas delas precisam ser escritas na
- * MESMA transacao. E isso que fecha a janela em que o processo morreria entre
+ * Elas moram na mesma classe porque duas delas precisam ser escritas na MESMA
+ * transacao. E isso que fecha a janela em que o processo morreria entre
  * registrar a chave do evento e aplicar a tarifa.
  *
- * Os metodos recebem valores, nao o evento inteiro, exceto onde a linha da
- * tarifa e literalmente o espelho do evento. Repositorio nao orquestra: quem
- * decide o valor e o TarifacaoService.
+ * Repositorio nao decide: ele devolve a oferta e os numeros do mes, e quem
+ * confronta os dois e o TarifacaoService.
  */
 @Repository
 public class TarifacaoRepository {
-
-    /**
-     * Plano usado quando o cliente nao tem linha em `oferta`. Num sistema real
-     * isso viria de um cadastro ou de uma chamada ao sistema de produtos; aqui
-     * o padrao evita que um Pix de cliente desconhecido derrube o consumidor e
-     * trave a particao inteira.
-     */
-    private static final int FRANQUIA_PADRAO = 5;
-    private static final BigDecimal TARIFA_PADRAO = new BigDecimal("1.90");
 
     private final JdbcTemplate jdbc;
 
@@ -83,18 +80,72 @@ public class TarifacaoRepository {
     // oferta - a regra
     // ------------------------------------------------------------------
 
-    public OfertaVO buscarOferta(String clienteId) {
-        try {
-            return jdbc.queryForObject(
-                    "SELECT cliente_id, pix_gratuitos_mes, valor_tarifa FROM oferta WHERE cliente_id = ?",
-                    (rs, linha) -> new OfertaVO(
-                            rs.getString("cliente_id"),
-                            rs.getInt("pix_gratuitos_mes"),
-                            rs.getBigDecimal("valor_tarifa")),
-                    clienteId);
-        } catch (EmptyResultDataAccessException clienteSemPlano) {
-            return new OfertaVO(clienteId, FRANQUIA_PADRAO, TARIFA_PADRAO);
+    /**
+     * A oferta que vigia NA COMPETENCIA DO EVENTO — nunca "a oferta atual".
+     *
+     * A competencia vem do ocorridoEm do evento, e a busca precisa acompanhar:
+     * um replay do topico feito em outubro tem de reencontrar o contrato que
+     * vigia em agosto e chegar ao mesmo valor de antes. Buscar pela vigencia de
+     * hoje faria o reprocessamento produzir um resultado diferente do original,
+     * e o fechamento mensal — o quarto criterio do ADR-002 — deixaria de ser
+     * reproduzivel.
+     *
+     * Devolve Optional VAZIO quando nao ha contrato vigente, e isso e uma
+     * resposta legitima do dominio, nao um erro: o ADR-002 decide que empresa
+     * sem contrato vigente na competencia nao e cobrada, e que nao existe plano
+     * padrao de fallback.
+     *
+     * Se o cadastro tiver vigencias sobrepostas — o que a chave primaria nao
+     * impede — vale a mais recente que ja tenha comecado. Ordenar e escolher e
+     * mais seguro que assumir linha unica e estourar em producao.
+     */
+    public Optional<OfertaVO> buscarOfertaVigente(String clienteId, String competencia) {
+
+        // Sem as faixas, de proposito: buscá-las dentro do RowMapper dispararia
+        // uma segunda consulta com este ResultSet ainda aberto, o que parte dos
+        // drivers recusa. Duas consultas em sequencia, e nao uma aninhada.
+        List<OfertaVO> vigentes = jdbc.query(
+                "SELECT cliente_id, vigencia_inicio, pix_gratuitos_mes, teto_mensal "
+                        + "  FROM oferta "
+                        + " WHERE cliente_id = ? "
+                        + "   AND vigencia_inicio <= ? "
+                        + "   AND (vigencia_fim IS NULL OR vigencia_fim >= ?) "
+                        + " ORDER BY vigencia_inicio DESC",
+                (rs, linha) -> new OfertaVO(
+                        rs.getString("cliente_id"),
+                        rs.getString("vigencia_inicio"),
+                        rs.getInt("pix_gratuitos_mes"),
+                        rs.getBigDecimal("teto_mensal"),
+                        Collections.<FaixaDeTarifaVO>emptyList()),
+                clienteId, competencia, competencia);
+
+        if (vigentes.isEmpty()) {
+            return Optional.empty();
         }
+
+        OfertaVO semFaixas = vigentes.get(0);
+        List<FaixaDeTarifaVO> faixas =
+                buscarFaixas(semFaixas.getClienteId(), semFaixas.getVigenciaInicio());
+
+        return Optional.of(new OfertaVO(
+                semFaixas.getClienteId(),
+                semFaixas.getVigenciaInicio(),
+                semFaixas.getPixGratuitosMes(),
+                semFaixas.getTetoMensal(),
+                faixas));
+    }
+
+    /** As faixas de preco de uma vigencia, na ordem em que devem ser avaliadas. */
+    private List<FaixaDeTarifaVO> buscarFaixas(String clienteId, String vigenciaInicio) {
+        return jdbc.query(
+                "SELECT valor_ate, valor_tarifa "
+                        + "  FROM oferta_faixa "
+                        + " WHERE cliente_id = ? AND vigencia_inicio = ? "
+                        + " ORDER BY ordem",
+                (rs, linha) -> new FaixaDeTarifaVO(
+                        rs.getBigDecimal("valor_ate"),
+                        rs.getBigDecimal("valor_tarifa")),
+                clienteId, vigenciaInicio);
     }
 
     // ------------------------------------------------------------------
@@ -102,13 +153,65 @@ public class TarifacaoRepository {
     // ------------------------------------------------------------------
 
     /**
-     * Quantos Pix deste cliente ja foram processados na competencia.
+     * Quantos Pix deste cliente ja consumiram franquia na competencia.
      *
-     * Conta a tabela `tarifa` inteira, e nao so as linhas com valor maior que
-     * zero: o Pix isento tambem consome franquia, e por isso tambem vira linha.
-     * Um contador em coluna separada faria o mesmo trabalho e ainda seria um
-     * UPDATE em delta, que e o tipo de operacao que a reentrega quebra.
+     * Nao e "quantas linhas de tarifa existem": SEM_CONTRATO e TETO_ATINGIDO
+     * viram linha, porque sao fatos, mas nao gastam uma cota que o cliente nao
+     * contratou ou que ja nao esta sendo cobrada. Quem sabe quais situacoes
+     * consomem e o proprio enum — a lista do IN e derivada dele, e nao escrita
+     * a mao, para que uma situacao nova acrescentada amanha nao passe
+     * silenciosamente por fora desta contagem.
      */
+    public long contarFranquiaConsumida(String clienteId, String competencia) {
+        List<String> situacoes = situacoesQueConsomemFranquia();
+
+        StringBuilder marcadores = new StringBuilder();
+        for (int i = 0; i < situacoes.size(); i++) {
+            if (i > 0) {
+                marcadores.append(", ");
+            }
+            marcadores.append('?');
+        }
+
+        List<Object> parametros = new ArrayList<Object>();
+        parametros.add(clienteId);
+        parametros.add(competencia);
+        parametros.addAll(situacoes);
+
+        Long total = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM tarifa "
+                        + " WHERE cliente_id = ? AND competencia = ? "
+                        + "   AND situacao IN (" + marcadores + ")",
+                Long.class, parametros.toArray());
+
+        if (total == null) {
+            return 0L;
+        }
+        return total.longValue();
+    }
+
+    private List<String> situacoesQueConsomemFranquia() {
+        List<String> nomes = new ArrayList<String>();
+        for (SituacaoDaTarifaVO situacao : SituacaoDaTarifaVO.values()) {
+            if (situacao.consomeFranquia()) {
+                nomes.add(situacao.name());
+            }
+        }
+        return nomes;
+    }
+
+    /** Total em reais ja cobrado do cliente na competencia. Alimenta o teto mensal. */
+    public BigDecimal totalTarifadoNaCompetencia(String clienteId, String competencia) {
+        BigDecimal total = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(valor), 0) FROM tarifa WHERE cliente_id = ? AND competencia = ?",
+                BigDecimal.class, clienteId, competencia);
+        if (total == null) {
+            return BigDecimal.ZERO;
+        }
+        return total;
+    }
+
+    /** Todos os Pix processados do cliente na competencia, cobrados ou nao. */
     public long contarPixNaCompetencia(String clienteId, String competencia) {
         Long total = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM tarifa WHERE cliente_id = ? AND competencia = ?",
@@ -119,27 +222,36 @@ public class TarifacaoRepository {
         return total.longValue();
     }
 
-    /** Uma linha por Pix. Valor 0.00 quando isento — a isencao tambem e um fato. */
-    public void registrarTarifa(PixRealizadoEvent evento, String competencia, BigDecimal valor) {
+    /** Quantos Pix do cliente naquela competencia terminaram numa dada situacao. */
+    public long contarPorSituacao(String clienteId, String competencia,
+            SituacaoDaTarifaVO situacao) {
+        Long total = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM tarifa "
+                        + " WHERE cliente_id = ? AND competencia = ? AND situacao = ?",
+                Long.class, clienteId, competencia, situacao.name());
+        if (total == null) {
+            return 0L;
+        }
+        return total.longValue();
+    }
+
+    /**
+     * Uma linha por Pix processado, sempre — inclusive quando nao houve
+     * cobranca. A isencao, a falta de contrato e o teto atingido tambem sao
+     * fatos, e e a coluna situacao que os distingue de uma cobranca de zero.
+     */
+    public void registrarTarifa(PixRealizadoEvent evento, String competencia,
+            DecisaoDeTarifacaoVO decisao) {
         jdbc.update("INSERT INTO tarifa "
-                        + "(evento_id, cliente_id, pix_id, competencia, valor, ocorrido_em) "
-                        + "VALUES (?, ?, ?, ?, ?, ?)",
+                        + "(evento_id, cliente_id, pix_id, competencia, situacao, valor, ocorrido_em) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 evento.getEventoId(),
                 evento.getClienteId(),
                 evento.getPixId(),
                 competencia,
-                valor,
+                decisao.getSituacao().name(),
+                decisao.getValor(),
                 Timestamp.from(evento.getOcorridoEm()));
-    }
-
-    public BigDecimal totalTarifadoNaCompetencia(String clienteId, String competencia) {
-        BigDecimal total = jdbc.queryForObject(
-                "SELECT COALESCE(SUM(valor), 0) FROM tarifa WHERE cliente_id = ? AND competencia = ?",
-                BigDecimal.class, clienteId, competencia);
-        if (total == null) {
-            return BigDecimal.ZERO;
-        }
-        return total;
     }
 
     public void limparTarifas() {
