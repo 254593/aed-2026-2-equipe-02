@@ -3,7 +3,7 @@
 Consome o fato **`PixRealizado`** e decide, para cada Pix, se ele cabe na franquia mensal da
 empresa ou se deve ser tarifado.
 
-Responsável: **Allainn Christiam (1664926)**.
+Responsável: **Allainn Christiam (254337)**.
 
 > **Se você está escrevendo o `servico-pix`, leia a seção
 > [O contrato que o publicador precisa respeitar](#o-contrato-que-o-publicador-precisa-respeitar).**
