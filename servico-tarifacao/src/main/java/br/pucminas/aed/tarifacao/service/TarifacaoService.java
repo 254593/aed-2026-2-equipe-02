@@ -97,7 +97,7 @@ public class TarifacaoService {
         String competencia = competenciaDe(evento);
         DecisaoDeTarifacaoVO decisao = decidir(evento, competencia);
 
-        repositorio.registrarTarifa(evento, competencia, decisao);
+        repositorio.registrarTarifa(eventoId, evento, competencia, decisao);
 
         log.info("pix processado  evento={}  empresa={}  competencia={}  situacao={}  valor={}",
                 eventoId, evento.getIdEmpresa(), competencia,

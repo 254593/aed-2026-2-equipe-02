@@ -250,14 +250,27 @@ public class TarifacaoRepository {
      * Uma linha por Pix processado, sempre — inclusive quando nao houve
      * cobranca. A isencao, a falta de contrato e o teto atingido tambem sao
      * fatos, e e a coluna situacao que os distingue de uma cobranca de zero.
+     *
+     * O eventoId vem COMO PARAMETRO, e nao de evento.getEventoId(). As duas
+     * tabelas precisam gravar a MESMA identidade, e a identidade que vale e a
+     * que o listener resolveu — o ce_id do envelope, com o corpo apenas como
+     * rede de seguranca.
+     *
+     * Tirar daqui do corpo criaria duas fontes para a mesma chave, e o modo de
+     * falha seria o pior possivel: um produtor que publicasse ce_id diferente
+     * do eventoId do corpo passaria pela deduplicacao (ce_id novo) e estouraria
+     * na chave primaria desta tabela (evento_id repetido). A transacao faz
+     * rollback, a excecao sobe ao listener, o offset nunca e confirmado, e a
+     * particao inteira trava em retentativa — exatamente o que o
+     * TarifacaoListener documenta querer evitar quando trata o ce_id ausente.
      */
-    public void registrarTarifa(PixRealizadoEvent evento, String competencia,
-            DecisaoDeTarifacaoVO decisao) {
+    public void registrarTarifa(String eventoId, PixRealizadoEvent evento,
+            String competencia, DecisaoDeTarifacaoVO decisao) {
         jdbc.update("INSERT INTO tarifa "
                         + "(evento_id, id_empresa, id_transacao_pix, competencia, "
                         + " situacao, valor, liquidado_em) "
                         + "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                evento.getEventoId(),
+                eventoId,
                 evento.getIdEmpresa(),
                 evento.getIdTransacaoPix(),
                 competencia,

@@ -376,7 +376,7 @@ virada do mês cairia em competências diferentes conforme onde o consumidor rod
 
 ```bash
 mvn spring-boot:run     # precisa do docker compose up -d na raiz
-mvn test                # 14 testes, sem Docker e sem o servico-pix
+mvn test                # 15 testes, sem Docker e sem o servico-pix
 ```
 
 O teste publica **JSON cru** no tópico, não objeto Java — assim ele exercita o contrato do fio,
@@ -395,14 +395,15 @@ justamente o bug que os testes 8 e 9 existem para pegar.
 | 4 | campos que o consumidor não declara são ignorados |
 | 5 | mensagem sem `ce_id` cai no `eventoId` do corpo e continua idempotente |
 | 6 | mesmo `idTransacaoPix` com `eventoId` distintos são dois fatos, não reentrega |
-| 7 | cliente que nunca teve contrato não é cobrado, e não consome franquia |
-| 8 | contrato encerrado: cobre em julho, `SEM_CONTRATO` em agosto |
-| 9 | troca de plano: vale a oferta vigente na competência **do evento** |
-| 10 | acima da franquia, o **valor** do Pix escolhe a faixa: 0,50 / 1,00 / 5,00 / 10,00 |
-| 11 | **a fronteira da faixa é exclusiva**: R$ 500,00 paga R$ 1,00, não R$ 0,50 |
-| 12 | **o estouro do teto é cobrado parcialmente** — o acumulado para exatamente no teto |
-| 13 | só o Pix isento consome franquia; o tarifado não |
-| 14 | a competência é isolada por mês: a franquia reinicia em setembro |
+| 7 | `ce_id` divergente do corpo não colide na PK da tarifa nem trava a partição |
+| 8 | empresa que nunca teve contrato não é cobrada, e não consome franquia |
+| 9 | contrato encerrado: cobre em julho, `SEM_CONTRATO` em agosto |
+| 10 | troca de plano: vale a oferta vigente na competência **do evento** |
+| 11 | acima da franquia, o **valor** do Pix escolhe a faixa: 0,50 / 1,00 / 5,00 / 10,00 |
+| 12 | **a fronteira da faixa é exclusiva**: R$ 500,00 paga R$ 1,00, não R$ 0,50 |
+| 13 | **o estouro do teto é cobrado parcialmente** — o acumulado para exatamente no teto |
+| 14 | só o Pix isento consome franquia; o tarifado não |
+| 15 | a competência é isolada por mês: a franquia reinicia em setembro |
 
 ## Configuração relevante
 

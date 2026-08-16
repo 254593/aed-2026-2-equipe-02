@@ -260,6 +260,45 @@ por isso nada disso seria pego por uma bateria verde. Foi encontrado relendo os 
 
 ---
 
+#### 9. Code review do próprio código — a identidade do evento tinha duas fontes
+
+**Pedido** (16/08). Rodar teste, revisão de código e conferência do enunciado antes de fechar a
+entrega.
+
+**Encontrado.** Um defeito que os 25 testes verdes não pegavam, e que a ferramenta havia escrito
+sem perceber. A identidade do evento vinha de **duas fontes diferentes**:
+
+- `evento_processado.evento_id` ← o `eventoId` resolvido pelo `TarifacaoListener`, que é o `ce_id`
+  do envelope (com o corpo apenas como rede de segurança);
+- `tarifa.evento_id` ← `evento.getEventoId()`, **sempre do corpo**.
+
+Com um produtor fora do contrato — `ce_id` diferente do `eventoId` do corpo — duas mensagens
+passariam pela deduplicação (dois `ce_id` distintos, ambos novos) e colidiriam na chave primária da
+`tarifa`, que já teria a identidade do corpo. A transação faz rollback, a exceção sobe ao listener,
+o offset nunca é confirmado, e a **partição inteira trava em retentativa** atrás de uma mensagem
+envenenada.
+
+O agravante: é exatamente o modo de falha que o javadoc do próprio `TarifacaoListener` diz querer
+evitar, oito linhas acima, ao justificar por que o `ce_id` ausente não pode virar `null`. O
+raciocínio estava certo e escrito; a implementação o contrariava no arquivo ao lado.
+
+**Aceito.** `registrarTarifa` passou a receber o `eventoId` resolvido como parâmetro, em vez de
+tirá-lo do corpo. Uma identidade, uma fonte.
+
+**Por que os testes não pegaram.** Todos publicavam `ce_id` igual ao `eventoId` do corpo — como o
+`servico-pix` faz, e como o contrato exige. A bateria inteira exercitava só o caminho em que as
+duas fontes coincidem, e por isso a duplicidade era invisível. O teste 7
+(`ceIdDivergenteDoCorpoNaoTravaAParticao`) foi escrito para o caminho que faltava, e **verificado
+contra o código antigo**: reintroduzindo o defeito, ele falha por `ConditionTimeout` — a segunda
+linha nunca aparece porque a partição travou. Só depois passou com a correção.
+
+**A lição, pela terceira vez nesta entrega.** Nas interações 6 e 7 o problema era teste escrito a
+partir do código. Aqui é a variação mais silenciosa: teste escrito a partir do **caminho feliz do
+contrato**. Uma bateria verde prova que o código faz o que os testes exercitam — não que o código
+está correto para as entradas que ele vai receber de fato.
+
+---
+
 <!--
   Demais integrantes: acrescentem a sua subseção abaixo, no mesmo formato
   (### Nome (matrícula) — parte pela qual respondeu).

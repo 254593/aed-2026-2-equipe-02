@@ -11,9 +11,10 @@
 | ADR-002: decisão do domínio (tarifação de Pix) | equipe |
 | `servico-tarifacao` — consumidor Kafka com idempotência | Allainn Christiam |
 | `servico-pix` — publisher com envelope CloudEvents 1.0 | Amanda Bouzan |
-| Testes de robustez do listener no consumidor (T5, T6, T12) | Alexsander da Silva |
-| As quatro saídas da política de tarifação do ADR (T7–T11) | Allainn Christiam |
-| Testes automatizados do publisher — validação e contrato (T2–T8) | Alexsander da Silva |
+| Testes de robustez do listener no consumidor (T5, T6, T15) | Alexsander da Silva |
+| As cinco saídas da política de tarifação (T8–T14) | Allainn Christiam |
+| Regressão de identidade do evento encontrada em code review (T7) | Allainn Christiam |
+| Testes automatizados do publisher — validação e contrato | Alexsander da Silva |
 | Infraestrutura Docker Compose (Kafka, Postgres, Kafka UI) | Allainn Christiam |
 
 ---
@@ -88,7 +89,13 @@ As mensagens são publicadas como JSON cru para exercitar o contrato do fio, nã
 |---|---|---|
 | 5 | `ceIdAusenteUsaFallbackDoCorpo` | Sem o header `ce_id` o listener cai no `eventoId` do corpo, registra `WARN` e ainda deduplica na reentrega |
 | 6 | `deduplicacaoUsaEventoIdNaoIdTransacaoPix` | Dois eventos com `eventoId` distintos e mesmo `idTransacaoPix` geram dois efeitos — a chave de deduplicação é a identidade do fato, não a da entidade |
-| 14 | `competenciaEIsoladaPorMes` | A franquia de agosto não contamina setembro: a competência vem do `liquidadoEm` do evento, nunca do relógio |
+| 15 | `competenciaEIsoladaPorMes` | A franquia de agosto não contamina setembro: a competência vem do `liquidadoEm` do evento, nunca do relógio |
+
+### Regressão encontrada em code review (Allainn Christiam)
+
+| # | Método | O que valida |
+|---|---|---|
+| 7 | `ceIdDivergenteDoCorpoNaoTravaAParticao` | A identidade gravada nas duas tabelas é a mesma — a do envelope. Antes, `evento_processado` usava o `ce_id` e `tarifa` usava o `eventoId` do corpo: duas mensagens com `ce_id` distintos e mesmo `eventoId` no corpo passavam pela deduplicação e colidiam na PK da tarifa, travando a partição em retentativa. O teste falha com o código anterior e passa com a correção |
 
 ### As cinco saídas da política (Allainn Christiam)
 
@@ -100,13 +107,13 @@ que os testes anteriores não pegavam — a fronteira das faixas e o estouro do 
 
 | # | Método | O que valida |
 |---|---|---|
-| 7 | `empresaSemContratoNaoECobrada` | Empresa sem contrato vira linha `SEM_CONTRATO`, valor 0,00, e **não consome franquia**. Substitui um teste anterior que exigia o oposto (plano padrão de R$ 1,90) e contradizia o ADR |
-| 8 | `contratoEncerradoDeixaDeSerCobrado` | A mesma empresa é cobrada em julho, quando havia contrato, e sai `SEM_CONTRATO` em agosto, quando não há |
-| 9 | `ofertaEBuscadaPelaCompetenciaDoEvento` | Troca de plano: um evento de julho reprocessado hoje reencontra o plano **de julho**. É o que torna o fechamento mensal reproduzível |
-| 10 | `tarifaVemDaFaixaDoValor` | Acima da franquia, o valor do Pix escolhe a faixa: R$ 0,50 / 1,00 / 5,00 / 10,00 |
-| 11 | `fronteiraDaFaixaEExclusiva` | Limite superior **exclusivo**: um Pix de exatamente R$ 500,00 paga R$ 1,00, não R$ 0,50 |
-| 12 | `tetoEhCobradoParcialmente` | O estouro do teto é cobrado até completá-lo (`TETO_PARCIAL`), e o acumulado para **exatamente** no teto — a invariante `valorTarifado ≤ teto` |
-| 13 | `apenasOIsentoConsomeFranquia` | Invariante `unidadesFranquiaConsumidas ≤ franquia`: o Pix tarifado não gasta cota |
+| 8 | `empresaSemContratoNaoECobrada` | Empresa sem contrato vira linha `SEM_CONTRATO`, valor 0,00, e **não consome franquia**. Substitui um teste anterior que exigia o oposto (plano padrão de R$ 1,90) e contradizia o ADR |
+| 9 | `contratoEncerradoDeixaDeSerCobrado` | A mesma empresa é cobrada em julho, quando havia contrato, e sai `SEM_CONTRATO` em agosto, quando não há |
+| 10 | `ofertaEBuscadaPelaCompetenciaDoEvento` | Troca de plano: um evento de julho reprocessado hoje reencontra o plano **de julho**. É o que torna o fechamento mensal reproduzível |
+| 11 | `tarifaVemDaFaixaDoValor` | Acima da franquia, o valor do Pix escolhe a faixa: R$ 0,50 / 1,00 / 5,00 / 10,00 |
+| 12 | `fronteiraDaFaixaEExclusiva` | Limite superior **exclusivo**: um Pix de exatamente R$ 500,00 paga R$ 1,00, não R$ 0,50 |
+| 13 | `tetoEhCobradoParcialmente` | O estouro do teto é cobrado até completá-lo (`TETO_PARCIAL`), e o acumulado para **exatamente** no teto — a invariante `valorTarifado ≤ teto` |
+| 14 | `apenasOIsentoConsomeFranquia` | Invariante `unidadesFranquiaConsumidas ≤ franquia`: o Pix tarifado não gasta cota |
 
 ---
 

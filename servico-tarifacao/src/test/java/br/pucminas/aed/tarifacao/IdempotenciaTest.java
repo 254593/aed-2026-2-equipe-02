@@ -196,12 +196,37 @@ class IdempotenciaTest {
         assertThat(repositorio.contarEventosProcessados()).isEqualTo(2L);
     }
 
+    @Test
+    @DisplayName("7 - ce_id divergente do corpo nao trava a particao")
+    void ceIdDivergenteDoCorpoNaoTravaAParticao() {
+        // Um produtor fora do contrato pode publicar ce_id != eventoId do corpo.
+        // A identidade que vale e a do envelope; se a tabela `tarifa` gravasse a
+        // do corpo, duas mensagens com ce_id distintos e o mesmo eventoId no
+        // corpo passariam pela deduplicacao e colidiriam na chave primaria da
+        // tarifa — rollback, offset nao confirmado, e a particao inteira travada
+        // em retentativa atras de uma mensagem envenenada.
+        String eventoIdDoCorpo = UUID.randomUUID().toString();
+        String json = montarJson(eventoIdDoCorpo, "pix-701", EMPRESA_PLANO_PJ, LIQUIDADO_EM,
+                VALOR_PADRAO);
+
+        enviar(json, UUID.randomUUID().toString(), EMPRESA_PLANO_PJ, LIQUIDADO_EM);
+        enviar(json, UUID.randomUUID().toString(), EMPRESA_PLANO_PJ, LIQUIDADO_EM);
+
+        // dois ce_id distintos: dois fatos, duas linhas, nenhuma colisao
+        aguardarQuantidadeDeTarifas(EMPRESA_PLANO_PJ, 2);
+        assertThat(repositorio.contarEventosProcessados()).isEqualTo(2L);
+
+        // e a particao continua viva: uma mensagem posterior e processada
+        publicar(UUID.randomUUID().toString(), "pix-702", EMPRESA_PLANO_PJ);
+        aguardarQuantidadeDeTarifas(EMPRESA_PLANO_PJ, 3);
+    }
+
     // ------------------------------------------------------------------
     // vigencia da oferta — ADR-002
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("7 - empresa que NUNCA teve contrato nao e cobrada")
+    @DisplayName("8 - empresa que NUNCA teve contrato nao e cobrada")
     void empresaSemContratoNaoECobrada() {
         // O ADR-002 e explicito: nao ha tabela padrao de fallback, porque cobrar
         // sem contrato vigente e cobranca indevida (CDC, art. 42, par. unico).
@@ -221,7 +246,7 @@ class IdempotenciaTest {
     }
 
     @Test
-    @DisplayName("8 - contrato encerrado: cobre em julho, nao cobra em agosto")
+    @DisplayName("9 - contrato encerrado: cobre em julho, nao cobra em agosto")
     void contratoEncerradoDeixaDeSerCobrado() {
         // emp-0005 tem vigencia de 2026-01 a 2026-07. O MESMO cliente, o mesmo
         // valor, competencias diferentes: em julho ha contrato e o Pix e isento
@@ -239,7 +264,7 @@ class IdempotenciaTest {
     }
 
     @Test
-    @DisplayName("9 - troca de plano: vale a oferta vigente na competencia DO EVENTO")
+    @DisplayName("10 - troca de plano: vale a oferta vigente na competencia DO EVENTO")
     void ofertaEBuscadaPelaCompetenciaDoEvento() {
         // emp-0004 trocou de plano: 2 isencoes a R$ 4,90 ate 2026-07, e 10
         // isencoes a R$ 2,50 a partir de 2026-08. Um evento de JULHO
@@ -272,7 +297,7 @@ class IdempotenciaTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("10 - acima da franquia, o VALOR do Pix escolhe a faixa da tarifa")
+    @DisplayName("11 - acima da franquia, o VALOR do Pix escolhe a faixa da tarifa")
     void tarifaVemDaFaixaDoValor() {
         // Tabela do Plano PJ: <500 -> 0,50 | <1000 -> 1,00 | <5000 -> 5,00 | resto -> 10,00
         publicar(UUID.randomUUID().toString(), "pix-a01", EMPRESA_FRANQUIA_2);
@@ -291,7 +316,7 @@ class IdempotenciaTest {
     }
 
     @Test
-    @DisplayName("11 - a fronteira da faixa e EXCLUSIVA: R$ 500,00 paga a faixa de cima")
+    @DisplayName("12 - a fronteira da faixa e EXCLUSIVA: R$ 500,00 paga a faixa de cima")
     void fronteiraDaFaixaEExclusiva() {
         // "Limite inferior inclusivo, superior exclusivo." Um Pix de exatamente
         // R$ 500,00 nao pertence a faixa "< 500": pertence a "500 <= v < 1000",
@@ -315,7 +340,7 @@ class IdempotenciaTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("12 - o estouro do teto e cobrado PARCIALMENTE, ate completar o teto")
+    @DisplayName("13 - o estouro do teto e cobrado PARCIALMENTE, ate completar o teto")
     void tetoEhCobradoParcialmente() {
         // emp-0006: sem isencao, R$ 10,00 o Pix, teto de R$ 25,00.
         //   Pix 1 ->  0 + 10 cabe    -> FAIXA         10,00  (acumulado 10)
@@ -348,7 +373,7 @@ class IdempotenciaTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("13 - so o Pix ISENTO consome franquia; o tarifado nao")
+    @DisplayName("14 - so o Pix ISENTO consome franquia; o tarifado nao")
     void apenasOIsentoConsomeFranquia() {
         // Invariante da especificacao: unidadesFranquiaConsumidas <= franquia do
         // plano. emp-0002 tem franquia 2; publicando cinco Pix, dois saem
@@ -369,7 +394,7 @@ class IdempotenciaTest {
     }
 
     @Test
-    @DisplayName("14 - a competencia e isolada por mes: a franquia reinicia em setembro")
+    @DisplayName("15 - a competencia e isolada por mes: a franquia reinicia em setembro")
     void competenciaEIsoladaPorMes() {
         publicar(UUID.randomUUID().toString(), "pix-e01", EMPRESA_FRANQUIA_2);
         publicar(UUID.randomUUID().toString(), "pix-e02", EMPRESA_FRANQUIA_2);
