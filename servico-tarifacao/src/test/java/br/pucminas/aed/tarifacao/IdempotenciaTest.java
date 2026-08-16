@@ -74,15 +74,15 @@ class IdempotenciaTest {
     /** Cai na primeira faixa do Plano PJ (abaixo de R$ 500) — tarifa R$ 0,50. */
     private static final String VALOR_PADRAO = "250.00";
 
-    private static final String EMPRESA_PLANO_PJ = "cli-0001";  // 10 isentos, teto 2.000
-    private static final String EMPRESA_FRANQUIA_2 = "cli-0002"; // 2 isentos, faixas do Plano PJ
-    private static final String EMPRESA_FRANQUIA_0 = "cli-0003"; // 0 isentos, faixa unica 0,99
-    private static final String EMPRESA_TROCA_PLANO = "cli-0004"; // 2/R$4,90 ate 07; 10/R$2,50 de 08
-    private static final String EMPRESA_CONTRATO_ENCERRADO = "cli-0005"; // vigencia so ate 2026-07
-    private static final String EMPRESA_COM_TETO = "cli-0006";   // 0 isentos, R$10,00, teto R$25,00
+    private static final String EMPRESA_PLANO_PJ = "emp-0001";  // 10 isentos, teto 2.000
+    private static final String EMPRESA_FRANQUIA_2 = "emp-0002"; // 2 isentos, faixas do Plano PJ
+    private static final String EMPRESA_FRANQUIA_0 = "emp-0003"; // 0 isentos, faixa unica 0,99
+    private static final String EMPRESA_TROCA_PLANO = "emp-0004"; // 2/R$4,90 ate 07; 10/R$2,50 de 08
+    private static final String EMPRESA_CONTRATO_ENCERRADO = "emp-0005"; // vigencia so ate 2026-07
+    private static final String EMPRESA_COM_TETO = "emp-0006";   // 0 isentos, R$10,00, teto R$25,00
 
     /** Cliente sem linha nenhuma em `oferta`: nunca teve contrato. */
-    private static final String EMPRESA_SEM_CONTRATO = "cli-9999";
+    private static final String EMPRESA_SEM_CONTRATO = "emp-9999";
 
     private static final Duration PRAZO = Duration.ofSeconds(20);
     private static final Duration JANELA_DE_OBSERVACAO = Duration.ofSeconds(3);
@@ -223,7 +223,7 @@ class IdempotenciaTest {
     @Test
     @DisplayName("8 - contrato encerrado: cobre em julho, nao cobra em agosto")
     void contratoEncerradoDeixaDeSerCobrado() {
-        // cli-0005 tem vigencia de 2026-01 a 2026-07. O MESMO cliente, o mesmo
+        // emp-0005 tem vigencia de 2026-01 a 2026-07. O MESMO cliente, o mesmo
         // valor, competencias diferentes: em julho ha contrato e o Pix e isento
         // pela franquia; em agosto nao ha, e sai SEM_CONTRATO.
         publicarEm(UUID.randomUUID().toString(), "pix-801", EMPRESA_CONTRATO_ENCERRADO,
@@ -241,7 +241,7 @@ class IdempotenciaTest {
     @Test
     @DisplayName("9 - troca de plano: vale a oferta vigente na competencia DO EVENTO")
     void ofertaEBuscadaPelaCompetenciaDoEvento() {
-        // cli-0004 trocou de plano: 2 isencoes a R$ 4,90 ate 2026-07, e 10
+        // emp-0004 trocou de plano: 2 isencoes a R$ 4,90 ate 2026-07, e 10
         // isencoes a R$ 2,50 a partir de 2026-08. Um evento de JULHO
         // reprocessado hoje tem de reencontrar o plano antigo — e nao o vigente
         // agora. E o que torna o fechamento mensal reproduzivel.
@@ -317,7 +317,7 @@ class IdempotenciaTest {
     @Test
     @DisplayName("12 - o estouro do teto e cobrado PARCIALMENTE, ate completar o teto")
     void tetoEhCobradoParcialmente() {
-        // cli-0006: sem isencao, R$ 10,00 o Pix, teto de R$ 25,00.
+        // emp-0006: sem isencao, R$ 10,00 o Pix, teto de R$ 25,00.
         //   Pix 1 ->  0 + 10 cabe    -> FAIXA         10,00  (acumulado 10)
         //   Pix 2 -> 10 + 10 cabe    -> FAIXA         10,00  (acumulado 20)
         //   Pix 3 -> 20 + 10 estoura -> TETO_PARCIAL   5,00  (acumulado 25)
@@ -351,7 +351,7 @@ class IdempotenciaTest {
     @DisplayName("13 - so o Pix ISENTO consome franquia; o tarifado nao")
     void apenasOIsentoConsomeFranquia() {
         // Invariante da especificacao: unidadesFranquiaConsumidas <= franquia do
-        // plano. cli-0002 tem franquia 2; publicando cinco Pix, dois saem
+        // plano. emp-0002 tem franquia 2; publicando cinco Pix, dois saem
         // isentos e tres tarifados — e o consumo tem de parar em 2, nao chegar a
         // 5. O relatorio de fechamento le esse acumulado para dizer quantas
         // isencoes o contrato de fato concedeu.
@@ -420,7 +420,7 @@ class IdempotenciaTest {
                 + "\"tipoChave\":\"EMAIL\","
                 + "\"bancoDestino\":\"999\","
                 + "\"endToEndId\":\"E99900000202608141300000000001\","
-                + "\"pagadorNome\":\"Cliente Ficticio\""
+                + "\"pagadorNome\":\"Empresa Ficticia\""
                 + "}";
     }
 

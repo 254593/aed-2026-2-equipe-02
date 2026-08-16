@@ -39,7 +39,7 @@ caiam na mesma partição, onde a ordem é total e o processamento é serial.
 (*hot partition*). Se isso aparecer, a saída é rever a granularidade da chave — não aumentar o
 número de partições, porque isso rebate o hash e quebra a ordem das chaves já existentes.
 
-*Verificação prática:* no teste de ponta a ponta, as 9 mensagens de `cli-0001` foram todas para a
+*Verificação prática:* no teste de ponta a ponta, as 9 mensagens de `emp-0001` foram todas para a
 partição 1 do tópico, confirmando o comportamento pretendido.
 
 ---
@@ -160,7 +160,7 @@ domínio de trás para a frente, exatamente o que o enunciado adverte na Parte A
 - as outras duas saídas que o ADR declara e o código não tinha: **tarifação por faixa de valor** e
   **teto mensal atingido**. É o "aprova, recusa e limita" do critério 1.
 
-**Efeito colateral, e ele importa.** Um teste automatizado já verde — o `cli-9999` recebendo
+**Efeito colateral, e ele importa.** Um teste automatizado já verde — o `emp-9999` recebendo
 R$ 1,90 no sexto Pix — estava *provando o comportamento errado*. Foi reescrito como
 `clienteSemContratoNaoECobrado`. Um teste que passa não é evidência de que a regra está certa: é
 evidência de que o código faz o que o teste diz, e aquele teste tinha sido escrito a partir do

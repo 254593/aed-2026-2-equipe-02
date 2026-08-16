@@ -109,60 +109,60 @@ CREATE INDEX IF NOT EXISTS idx_tarifa_empresa_competencia ON tarifa (id_empresa,
 -- (CDC, art. 42, paragrafo unico). Ver ADR-002, secao Decisao.
 -- ---------------------------------------------------------------------------
 
--- cli-0001  PLANO PJ, exatamente como a especificacao da regra o define:
+-- emp-0001  PLANO PJ, exatamente como a especificacao da regra o define:
 --           10 isencoes por competencia, teto de R$ 2.000,00 e a tabela de
 --           quatro faixas. Repare nos limites: EXCLUSIVOS. Um Pix de
 --           R$ 500,00 nao cai na primeira faixa, e sim na segunda.
 INSERT INTO oferta (id_empresa, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
-     VALUES ('cli-0001', '2026-01', NULL, 10, 2000.00) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0001', '2026-01', NULL, 10, 2000.00) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0001', '2026-01', 1,  500.00,  0.50) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0001', '2026-01', 1,  500.00,  0.50) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0001', '2026-01', 2, 1000.00,  1.00) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0001', '2026-01', 2, 1000.00,  1.00) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0001', '2026-01', 3, 5000.00,  5.00) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0001', '2026-01', 3, 5000.00,  5.00) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0001', '2026-01', 4, NULL,    10.00) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0001', '2026-01', 4, NULL,    10.00) ON CONFLICT DO NOTHING;
 
--- cli-0002  franquia curta (2), para exercitar o fim da franquia sem publicar
+-- emp-0002  franquia curta (2), para exercitar o fim da franquia sem publicar
 --           onze eventos. Mesma tabela de faixas do Plano PJ, sem teto.
 INSERT INTO oferta (id_empresa, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
-     VALUES ('cli-0002', '2026-01', NULL, 2, NULL) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0002', '2026-01', NULL, 2, NULL) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0002', '2026-01', 1,  500.00,  0.50) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0002', '2026-01', 1,  500.00,  0.50) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0002', '2026-01', 2, 1000.00,  1.00) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0002', '2026-01', 2, 1000.00,  1.00) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0002', '2026-01', 3, 5000.00,  5.00) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0002', '2026-01', 3, 5000.00,  5.00) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0002', '2026-01', 4, NULL,    10.00) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0002', '2026-01', 4, NULL,    10.00) ON CONFLICT DO NOTHING;
 
--- cli-0003  sem isencao: tarifa desde o primeiro Pix
+-- emp-0003  sem isencao: tarifa desde o primeiro Pix
 INSERT INTO oferta (id_empresa, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
-     VALUES ('cli-0003', '2026-01', NULL, 0, NULL) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0003', '2026-01', NULL, 0, NULL) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0003', '2026-01', 1, NULL, 0.99) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0003', '2026-01', 1, NULL, 0.99) ON CONFLICT DO NOTHING;
 
--- cli-0004  TROCA DE PLANO: 2 isencoes ate 2026-07, 10 isencoes a partir de 2026-08.
+-- emp-0004  TROCA DE PLANO: 2 isencoes ate 2026-07, 10 isencoes a partir de 2026-08.
 --           O mesmo evento reprocessado tem de reencontrar a oferta da SUA
 --           competencia, e nao a vigente hoje.
 INSERT INTO oferta (id_empresa, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
-     VALUES ('cli-0004', '2026-01', '2026-07', 2, NULL) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0004', '2026-01', '2026-07', 2, NULL) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0004', '2026-01', 1, NULL, 4.90) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0004', '2026-01', 1, NULL, 4.90) ON CONFLICT DO NOTHING;
 INSERT INTO oferta (id_empresa, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
-     VALUES ('cli-0004', '2026-08', NULL, 10, NULL) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0004', '2026-08', NULL, 10, NULL) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0004', '2026-08', 1, NULL, 2.50) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0004', '2026-08', 1, NULL, 2.50) ON CONFLICT DO NOTHING;
 
--- cli-0005  CONTRATO ENCERRADO em 2026-07 e sem sucessora: em 2026-08 nao ha
+-- emp-0005  CONTRATO ENCERRADO em 2026-07 e sem sucessora: em 2026-08 nao ha
 --           oferta vigente, e o Pix sai SEM_CONTRATO, valor 0.00.
 INSERT INTO oferta (id_empresa, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
-     VALUES ('cli-0005', '2026-01', '2026-07', 5, NULL) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0005', '2026-01', '2026-07', 5, NULL) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0005', '2026-01', 1, NULL, 1.90) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0005', '2026-01', 1, NULL, 1.90) ON CONFLICT DO NOTHING;
 
--- cli-0006  TETO BAIXO (R$ 25,00), sem isencao, a R$ 10,00 o Pix. Existe para
+-- emp-0006  TETO BAIXO (R$ 25,00), sem isencao, a R$ 10,00 o Pix. Existe para
 --           exercitar as DUAS saidas do teto sem publicar 200 eventos:
 --             Pix 1  ->  0 + 10 cabe   -> FAIXA         10,00   (acumulado 10)
 --             Pix 2  -> 10 + 10 cabe   -> FAIXA         10,00   (acumulado 20)
@@ -171,6 +171,6 @@ INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, v
 --           O acumulado para exatamente no teto: e a invariante
 --           valor_tarifado_na_competencia <= teto, que so o parcial garante.
 INSERT INTO oferta (id_empresa, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
-     VALUES ('cli-0006', '2026-01', NULL, 0, 25.00) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0006', '2026-01', NULL, 0, 25.00) ON CONFLICT DO NOTHING;
 INSERT INTO oferta_faixa (id_empresa, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
-     VALUES ('cli-0006', '2026-01', 1, NULL, 10.00) ON CONFLICT DO NOTHING;
+     VALUES ('emp-0006', '2026-01', 1, NULL, 10.00) ON CONFLICT DO NOTHING;

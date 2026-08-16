@@ -1,11 +1,11 @@
 {
   "idTransacaoPix": "pix-001",
-  "idEmpresa": "cli-0001",
+  "idEmpresa": "emp-0001",
   "valor": 150.00,
   "chavePix": "fulano@exemplo.com",
   "tipoChave": "EMAIL",
   "bancoDestino": "999",
   "endToEndId": "E99900000202608141300000000001",
-  "pagadorNome": "Cliente Ficticio"
+  "pagadorNome": "Empresa Ficticia"
 }
 

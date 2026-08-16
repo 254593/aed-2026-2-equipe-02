@@ -152,17 +152,17 @@ desta tabela errou.
 
 | id_empresa | vigência | grátis/mês | faixas | teto |
 |---|---|---|---|---|
-| `cli-0001` | 2026-01 → aberta | 10 | **Plano PJ** (as quatro acima) | 2.000,00 |
-| `cli-0002` | 2026-01 → aberta | 2 | Plano PJ | — |
-| `cli-0003` | 2026-01 → aberta | 0 | única: 0,99 | — |
-| `cli-0004` | 2026-01 → 2026-07 | 2 | única: 4,90 | — |
-| `cli-0004` | 2026-08 → aberta | 10 | única: 2,50 | — |
-| `cli-0005` | 2026-01 → **2026-07** | 5 | única: 1,90 | — |
-| `cli-0006` | 2026-01 → aberta | 0 | única: 10,00 | **25,00** |
+| `emp-0001` | 2026-01 → aberta | 10 | **Plano PJ** (as quatro acima) | 2.000,00 |
+| `emp-0002` | 2026-01 → aberta | 2 | Plano PJ | — |
+| `emp-0003` | 2026-01 → aberta | 0 | única: 0,99 | — |
+| `emp-0004` | 2026-01 → 2026-07 | 2 | única: 4,90 | — |
+| `emp-0004` | 2026-08 → aberta | 10 | única: 2,50 | — |
+| `emp-0005` | 2026-01 → **2026-07** | 5 | única: 1,90 | — |
+| `emp-0006` | 2026-01 → aberta | 0 | única: 10,00 | **25,00** |
 
-`cli-0001` é o Plano PJ tal como a especificação o define. `cli-0002` tem a mesma tabela de faixas
-com franquia curta, para exercitar o fim da franquia sem publicar onze eventos. `cli-0004`
-demonstra troca de plano; `cli-0005`, contrato encerrado sem sucessora; `cli-0006` tem teto baixo
+`emp-0001` é o Plano PJ tal como a especificação o define. `emp-0002` tem a mesma tabela de faixas
+com franquia curta, para exercitar o fim da franquia sem publicar onze eventos. `emp-0004`
+demonstra troca de plano; `emp-0005`, contrato encerrado sem sucessora; `emp-0006` tem teto baixo
 de propósito, para exercitar `TETO_PARCIAL` e `TETO_ATINGIDO` em quatro Pix em vez de duzentos.
 Qualquer outro `idEmpresa` cai em `SEM_CONTRATO`.
 
@@ -236,13 +236,13 @@ do contrato.
   "eventoId":     "3f2b8c10-9a4e-4f77-8f31-6b0a2d5e7c11",
   "liquidadoEm":   "2026-08-14T13:00:00.000Z",
   "idTransacaoPix":        "pix-001",
-  "idEmpresa":    "cli-0001",
+  "idEmpresa":    "emp-0001",
   "valor":        150.00,
   "chavePix":     "fulano@exemplo.com",
   "tipoChave":    "EMAIL",
   "bancoDestino": "999",
   "endToEndId":   "E99900000202608141300000000001",
-  "pagadorNome":  "Cliente Ficticio"
+  "pagadorNome":  "Empresa Ficticia"
 }
 ```
 

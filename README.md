@@ -112,7 +112,7 @@ A resposta é **202 Accepted**, não 200: no instante da resposta o Pix ainda n�
 Dá para exercitar o consumidor sozinho, publicando direto no tópico:
 
 ```bash
-printf 'ce_specversion=1.0;ce_id=evt-001;ce_source=/pagamentos/servico-pix;ce_type=pagamentos.pix.realizado.v1;ce_time=2026-08-14T13:00:00.000Z#cli-0001~{"eventoId":"evt-001","liquidadoEm":"2026-08-14T13:00:00.000Z","idTransacaoPix":"pix-001","idEmpresa":"cli-0001","valor":150.00,"chavePix":"fulano@exemplo.com","tipoChave":"EMAIL","bancoDestino":"999","endToEndId":"E99900000202608141300000000001","pagadorNome":"Cliente Ficticio"}\n' | docker exec -i e02-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9094 --topic pagamentos.pix.realizado.v1 --property parse.headers=true --property headers.delimiter='#' --property headers.separator=';' --property headers.key.separator='=' --property parse.key=true --property key.separator='~'
+printf 'ce_specversion=1.0;ce_id=evt-001;ce_source=/pagamentos/servico-pix;ce_type=pagamentos.pix.realizado.v1;ce_time=2026-08-14T13:00:00.000Z#emp-0001~{"eventoId":"evt-001","liquidadoEm":"2026-08-14T13:00:00.000Z","idTransacaoPix":"pix-001","idEmpresa":"emp-0001","valor":150.00,"chavePix":"fulano@exemplo.com","tipoChave":"EMAIL","bancoDestino":"999","endToEndId":"E99900000202608141300000000001","pagadorNome":"Empresa Ficticia"}\n' | docker exec -i e02-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9094 --topic pagamentos.pix.realizado.v1 --property parse.headers=true --property headers.delimiter='#' --property headers.separator=';' --property headers.key.separator='=' --property parse.key=true --property key.separator='~'
 ```
 
 Repetir a mesma linha três vezes demonstra a idempotência: o `ce_id` é o mesmo e o efeito
@@ -121,7 +121,7 @@ publicação.
 
 ## Passo 5 — conferir o resultado
 
-**No banco** — `cli-0001` é o Plano PJ: 10 Pix isentos por mês, acima disso a tarifa vem da faixa
+**No banco** — `emp-0001` é o Plano PJ: 10 Pix isentos por mês, acima disso a tarifa vem da faixa
 do valor (abaixo de R$ 500 → R$ 0,50):
 
 ```bash
@@ -137,7 +137,7 @@ docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT id_transacao_
 ```
 
 A coluna `situacao` é o motivo da decisão, e é dado de domínio: três das cinco saídas valem zero e
-significam coisas diferentes. Trocando o `idEmpresa` para `cli-9999` — que não tem contrato — a
+significam coisas diferentes. Trocando o `idEmpresa` para `emp-9999` — que não tem contrato — a
 linha sai como `SEM_CONTRATO`, e **não** cobrada:
 
 ```bash

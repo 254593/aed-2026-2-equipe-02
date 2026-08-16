@@ -19,9 +19,9 @@ class KafkaConfigTest {
         ObjectMapper objectMapper = new KafkaConfig().objectMapper();
         PixRealizadoEvent evento = new PixRealizadoEvent(
                 "evt-001", Instant.parse("2026-08-14T13:00:00.000Z"),
-                "pix-001", "cli-0001", new BigDecimal("150.00"),
+                "pix-001", "emp-0001", new BigDecimal("150.00"),
                 "fulano@exemplo.com", "EMAIL", "999",
-                "E99900000202608141300000000001", "Cliente Ficticio");
+                "E99900000202608141300000000001", "Empresa Ficticia");
 
         String json = objectMapper.writeValueAsString(evento);
 
