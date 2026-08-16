@@ -121,23 +121,24 @@ publicação.
 
 ## Passo 5 — conferir o resultado
 
-**No banco** — `cli-0001` tem 5 Pix isentos por mês; acima disso a tarifa vem da faixa do valor
-(até R$ 500 → R$ 1,90):
+**No banco** — `cli-0001` é o Plano PJ: 10 Pix isentos por mês, acima disso a tarifa vem da faixa
+do valor (abaixo de R$ 500 → R$ 0,50):
 
 ```bash
 docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT pix_id, competencia, situacao, valor FROM tarifa ORDER BY ocorrido_em;"
 ```
 
 ```
-  pix_id   | competencia |    situacao     | valor
------------+-------------+-----------------+-------
- pix-e2e-1 | 2026-08     | ISENTO_FRANQUIA |  0.00
+  pix_id    | competencia |   situacao   | valor
+------------+-------------+--------------+-------
+ pix-e2e-1  | 2026-08     | FRANQUIA     |  0.00
  ...
- pix-e2e-6 | 2026-08     | TARIFADO        |  1.90   <- o sexto excede a franquia
+ pix-e2e-11 | 2026-08     | FAIXA        |  0.50   <- o 11º excede a franquia
 ```
 
-A coluna `situacao` é o que distingue as três saídas que valem zero. Trocando o `clienteId` para
-`cli-9999` — que não tem contrato — a linha sai como `SEM_CONTRATO`, e **não** cobrada:
+A coluna `situacao` é o motivo da decisão, e é dado de domínio: três das cinco saídas valem zero e
+significam coisas diferentes. Trocando o `clienteId` para `cli-9999` — que não tem contrato — a
+linha sai como `SEM_CONTRATO`, e **não** cobrada:
 
 ```bash
 docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT situacao, count(*), sum(valor) FROM tarifa GROUP BY situacao;"
@@ -163,11 +164,12 @@ Roda com Kafka embutido e H2 — **sem Docker e sem o `servico-pix`**:
 mvn -f servico-tarifacao/pom.xml test
 ```
 
-Doze cenários, cobrindo a idempotência e as quatro saídas da política do ADR-002: **o mesmo evento
-entregue 3x produz efeito 1x** · consumidor tolerante a campos desconhecidos · `ce_id` ausente ·
-mesmo `pixId` com `eventoId` distintos · isenção por franquia · tarifação pela faixa de valor ·
-cliente sem contrato não é cobrado · contrato encerrado · troca de plano respeitando a competência
-do evento · teto mensal · isolamento por competência. A tabela completa está em
+Catorze cenários, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
+3x produz efeito 1x** · consumidor tolerante a campos desconhecidos · `ce_id` ausente · mesmo
+`pixId` com `eventoId` distintos · isenção por franquia · a faixa de valor, com a fronteira
+exclusiva · cliente sem contrato não é cobrado · contrato encerrado · troca de plano respeitando a
+competência do evento · o estouro do teto cobrado parcialmente · só o isento consome franquia ·
+isolamento por competência. A tabela completa está em
 [servico-tarifacao/README.md](servico-tarifacao/README.md#rodar).
 
 O `servico-pix` tem a própria bateria (`mvn -f servico-pix/pom.xml test`): ISO-8601 no fio, tópico
@@ -189,6 +191,7 @@ aed-2026-2-equipe-02/
 ├── docker-compose.yml           Kafka + Postgres + Kafka UI
 ├── docs/
 │   ├── adr/ADR-002-dominio-do-projeto.md
+│   ├── regra-de-tarifacao.md    a regra em detalhe: faixas, teto, compensação
 │   ├── IA.md                    registro do uso de IA, por integrante
 │   └── entregas/aula-02.md      folha de rosto desta entrega
 ├── servico-pix/                 publicador  (projeto Maven independente)

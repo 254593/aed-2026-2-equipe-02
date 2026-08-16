@@ -23,6 +23,7 @@
 | O quê | Caminho |
 |---|---|
 | Decisão do domínio | [docs/adr/ADR-002-dominio-do-projeto.md](../adr/ADR-002-dominio-do-projeto.md) |
+| Especificação da regra de tarifação | [docs/regra-de-tarifacao.md](../regra-de-tarifacao.md) |
 | Registro de uso de IA | [docs/IA.md](../IA.md) |
 | Consumidor (regra de tarifação + idempotência) | [servico-tarifacao/](../../servico-tarifacao/) |
 | Publisher (eventos CloudEvents) | [servico-pix/](../../servico-pix/) |
@@ -76,7 +77,7 @@ As mensagens são publicadas como JSON cru para exercitar o contrato do fio, nã
 
 | # | Método | O que valida |
 |---|---|---|
-| 1 | `pixDentroDaFranquiaSaiIsento` | Pix dentro da franquia é registrado com valor 0,00 e situação `ISENTO_FRANQUIA` |
+| 1 | `pixDentroDaFranquiaSaiIsento` | Pix dentro da franquia é registrado com valor 0,00 e motivo `FRANQUIA` |
 | 2 | `reentregaNaoDuplicaOEfeito` | O mesmo evento entregue 3× gera efeito 1× — o item obrigatório do B.3 |
 | 3 | `pixAcimaDaFranquiaETarifado` | O Pix seguinte ao fim da franquia é cobrado |
 | 4 | `consumidorTolerante` | Campos que o consumidor não declara são ignorados sem erro |
@@ -87,21 +88,25 @@ As mensagens são publicadas como JSON cru para exercitar o contrato do fio, nã
 |---|---|---|
 | 5 | `ceIdAusenteUsaFallbackDoCorpo` | Sem o header `ce_id` o listener cai no `eventoId` do corpo, registra `WARN` e ainda deduplica na reentrega |
 | 6 | `deduplicacaoUsaEventoIdNaoPixId` | Dois eventos com `eventoId` distintos e mesmo `pixId` geram dois efeitos — a chave de deduplicação é a identidade do fato, não a da entidade |
-| 12 | `competenciaEIsoladaPorMes` | A franquia de agosto não contamina setembro: a competência vem do `ocorridoEm` do evento, nunca do relógio |
+| 14 | `competenciaEIsoladaPorMes` | A franquia de agosto não contamina setembro: a competência vem do `ocorridoEm` do evento, nunca do relógio |
 
-### As quatro saídas da política do ADR-002 (Allainn Christiam)
+### As cinco saídas da política (Allainn Christiam)
 
-Acrescentados em 15/08, ao confrontar o consumidor com o ADR. O ponto de decisão que o ADR declara
-— *isentar, tarifar por faixa de valor, não cobrar por teto atingido*, mais a regra de que empresa
-sem contrato vigente não é cobrada — só estava implementado pela metade.
+Acrescentados em 15/08, em duas rodadas: primeiro ao confrontar o consumidor com o ADR-002, depois
+ao receber de Evandro a especificação detalhada da regra
+([docs/regra-de-tarifacao.md](../regra-de-tarifacao.md)). A segunda rodada corrigiu dois defeitos
+que os testes anteriores não pegavam — a fronteira das faixas e o estouro do teto. Ver
+[IA.md](../IA.md), interações 6 e 7.
 
 | # | Método | O que valida |
 |---|---|---|
-| 7 | `clienteSemContratoNaoECobrado` | Cliente sem contrato vira linha `SEM_CONTRATO` com valor 0,00 e **não consome franquia**. Substitui um teste anterior que exigia o oposto (plano padrão de R$ 1,90) e contradizia o ADR — ver [IA.md](../IA.md), interação 6 |
+| 7 | `clienteSemContratoNaoECobrado` | Cliente sem contrato vira linha `SEM_CONTRATO`, valor 0,00, e **não consome franquia**. Substitui um teste anterior que exigia o oposto (plano padrão de R$ 1,90) e contradizia o ADR |
 | 8 | `contratoEncerradoDeixaDeSerCobrado` | O mesmo cliente é cobrado em julho, quando havia contrato, e sai `SEM_CONTRATO` em agosto, quando não há |
 | 9 | `ofertaEBuscadaPelaCompetenciaDoEvento` | Troca de plano: um evento de julho reprocessado hoje reencontra o plano **de julho**. É o que torna o fechamento mensal reproduzível |
-| 10 | `tarifaVemDaFaixaDoValor` | Acima da franquia, o valor do Pix escolhe a faixa: R$ 1,90 / R$ 3,50 / R$ 7,00 |
-| 11 | `tetoMensalInterrompeACobranca` | Atingido o teto de gasto do mês, os Pix seguintes saem `TETO_ATINGIDO` com valor 0,00 |
+| 10 | `tarifaVemDaFaixaDoValor` | Acima da franquia, o valor do Pix escolhe a faixa: R$ 0,50 / 1,00 / 5,00 / 10,00 |
+| 11 | `fronteiraDaFaixaEExclusiva` | Limite superior **exclusivo**: um Pix de exatamente R$ 500,00 paga R$ 1,00, não R$ 0,50 |
+| 12 | `tetoEhCobradoParcialmente` | O estouro do teto é cobrado até completá-lo (`TETO_PARCIAL`), e o acumulado para **exatamente** no teto — a invariante `valorTarifado ≤ teto` |
+| 13 | `apenasOIsentoConsomeFranquia` | Invariante `unidadesFranquiaConsumidas ≤ franquia`: o Pix tarifado não gasta cota |
 
 ---
 

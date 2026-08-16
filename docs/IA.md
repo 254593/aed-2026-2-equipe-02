@@ -171,6 +171,55 @@ código, não a partir do ADR.
 
 ---
 
+#### 7. Confrontar o código com a especificação da regra — dois defeitos que os testes não pegavam
+
+**Pedido** (15/08, ao receber de Evandro o `regra-de-tarifacao.md`). Comparar o consumidor com a
+especificação detalhada e alinhar o que divergisse.
+
+**Sugerido.** A ferramenta comparou item a item e apontou seis divergências, duas delas defeitos de
+cálculo — as outras quatro eram nomenclatura e dados de exemplo.
+
+**Aceito — o estouro do teto cobrado parcialmente.** A regra tem um passo que o código não tinha:
+quando a tarifa não cabe no espaço restante do teto, cobra-se *o que cabe*, não a tarifa inteira e
+não zero. Com teto de R$ 2.000,00 e R$ 1.995,00 já cobrados, um Pix de R$ 6.000,00 (faixa
+R$ 10,00) fechava o mês em R$ 2.005,00 — **acima do teto contratado**. A invariante
+`valorTarifadoNaCompetencia ≤ teto` que a especificação declara simplesmente não era garantida.
+
+**Aceito — a fronteira das faixas é exclusiva.** O código tratava o limite superior como inclusivo
+(`valor <= 500`); a especificação define "limite inferior inclusivo, superior exclusivo". A
+diferença aparece exatamente nos valores redondos, que são os mais comuns numa transferência: um
+Pix de R$ 500,00 pagava R$ 0,50 e deveria pagar R$ 1,00. A coluna foi renomeada de `valor_ate`
+para `valor_abaixo_de`, porque "até" se lê como inclusivo e foi assim que o erro entrou.
+
+**Aceito — só o Pix isento consome franquia.** O código incrementava a contagem também nos
+tarifados. A decisão saía igual (uma vez atingido o limite, o contador para nele), mas o acumulado
+crescia sem parar e violava a invariante `unidadesFranquiaConsumidas ≤ franquia do plano` — e é
+esse acumulado que o relatório de fechamento lê para dizer quantas isenções o contrato concedeu.
+
+**RECUSADO — renomear o contrato do fio para o vocabulário da especificação.** A especificação usa
+`idEmpresa`, `idTransacaoPix` e `liquidadoEm`; o evento publicado usa `clienteId`, `pixId` e
+`ocorridoEm`. Razão técnica da recusa: o contrato já está publicado pelo `servico-pix` e consumido
+aqui, e renomear os três campos quebraria os dois lados — produtor, consumidor, schema e as duas
+baterias de teste — **sem mudar uma única regra de negócio**. Custo alto, benefício zero em
+comportamento, e a um dia do prazo. O README do consumidor ganhou uma tabela de equivalência entre
+os dois vocabulários, que resolve o problema real (quem lê a spec e o código não se perder) sem
+tocar em código que funciona.
+
+**RECUSADO — implementar a compensação junto.** A especificação traz a seção de compensação inteira
+(estorno, `unidadesFranquiaEstornadas`, `valorEstornadoNaCompetencia`, `PixMarcadoNaoTarifavel`).
+Recusada porque é a saga da aula 05, e a própria especificação marca esses dois acumuladores como
+"lidos apenas pelo fechamento", invisíveis para a ordem de avaliação. Implementá-los agora seria
+carregar estado que nada nesta etapa consome — e o ADR-002 já reserva compensar e fechar para
+iterações posteriores.
+
+**A lição que se repete.** É a segunda vez nesta entrega que um teste verde estava certificando um
+comportamento errado. Na interação 6 era o plano padrão; aqui eram o teto e a fronteira das faixas.
+Nos dois casos o teste tinha sido escrito a partir do código, e não da regra — um teste derivado da
+implementação só prova que a implementação é ela mesma. Os testes 11, 12 e 13 nasceram da
+especificação, não do código, e foram escritos para falhar antes de passar.
+
+---
+
 <!--
   Demais integrantes: acrescentem a sua subseção abaixo, no mesmo formato
   (### Nome (matrícula) — parte pela qual respondeu).

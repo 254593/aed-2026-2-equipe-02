@@ -13,15 +13,20 @@ Responsável: **Allainn Christiam (1664926)**.
 
 ## A regra de negócio
 
-É a **`PoliticaDeTarifacao`** do [ADR-002](../docs/adr/ADR-002-dominio-do-projeto.md). Para cada
-Pix ela decide entre **quatro** saídas — aprova, recusa e limita:
+A especificação completa é [`docs/regra-de-tarifacao.md`](../docs/regra-de-tarifacao.md); a decisão
+de domínio que a motiva está no [ADR-002](../docs/adr/ADR-002-dominio-do-projeto.md). Para cada Pix
+a política decide entre **cinco** saídas — aprova, recusa e limita:
 
-| Situação | Valor | Consome franquia? | Quando |
+| Motivo | Valor | Consome franquia? | Quando |
 |---|---|---|---|
 | `SEM_CONTRATO` | `0.00` | não | não há oferta vigente na competência |
-| `ISENTO_FRANQUIA` | `0.00` | **sim** | consumo do mês < franquia do plano |
-| `TARIFADO` | faixa | **sim** | acima da franquia; o preço vem da faixa do valor |
-| `TETO_ATINGIDO` | `0.00` | não | o gasto do mês já atingiu o teto do plano |
+| `FRANQUIA` | `0.00` | **sim** | consumo do mês < franquia do plano |
+| `FAIXA` | faixa | não | acima da franquia; o preço vem da faixa do valor |
+| `TETO_PARCIAL` | o que cabe | não | a faixa não cabe no espaço restante do teto |
+| `TETO_ATINGIDO` | `0.00` | não | o teto do mês já estava completo |
+
+Quatro deles vêm da especificação. O `SEM_CONTRATO` vem do ADR-002 e cobre o caso que a
+especificação não trata: não haver oferta vigente.
 
 ```
 Pix chega
@@ -32,11 +37,15 @@ qual a competência?  →  mês do ocorridoEm DO EVENTO (não de now())
    ↓
 há oferta vigente NESSA competência?  ──não──▶  SEM_CONTRATO, 0.00
    ↓ sim
-franquia consumida < pix_gratuitos_mes ?  ──sim──▶  ISENTO_FRANQUIA, 0.00
+franquia consumida < pix_gratuitos_mes ?  ──sim──▶  FRANQUIA, 0.00
    ↓ não
-plano tem teto e já foi atingido ?  ──sim──▶  TETO_ATINGIDO, 0.00
+tarifa = a faixa que cobre o valor do Pix
+   ↓
+já tarifado >= teto ?  ──sim──▶  TETO_ATINGIDO, 0.00
    ↓ não
-TARIFADO, valor = a faixa que cobre o valor do Pix
+já tarifado + tarifa > teto ?  ──sim──▶  TETO_PARCIAL, (teto − já tarifado)
+   ↓ não
+FAIXA, tarifa integral
    ↓
 grava a linha em `tarifa`  (mesma transação do registro da deduplicação)
    ↓
@@ -45,16 +54,58 @@ commit
 ack do offset
 ```
 
-**A ordem das perguntas não é arbitrária.** Sem contrato não se pergunta pela franquia, e o teto
-só faz sentido depois de saber que haveria cobrança — inverter as duas últimas faria um Pix isento
-"atingir o teto" e sair com a situação errada no extrato.
+**A ordem das perguntas não é arbitrária.** A franquia é sempre consumida primeiro, antes de
+qualquer verificação de teto: uma empresa de alto volume termina o mês com as 10 de 10 isenções
+usadas independentemente do teto, e é isso que mantém o relatório de fechamento fiel. E o teto só é
+consultado depois de calcular a tarifa, porque o último passo precisa saber quanto caberia cobrar.
 
-### Por que a situação é uma coluna, e não só o valor
+### O estouro do teto é cobrado parcialmente
 
-Três das quatro saídas valem `0.00` e significam coisas diferentes. Sem a coluna `situacao`, um
-Pix isento por franquia, um de empresa sem contrato e um acima do teto seriam indistinguíveis no
-extrato — justamente onde a auditoria e a contestação comercial precisam de clareza. E a contagem
-de franquia depende disso: `SEM_CONTRATO` e `TETO_ATINGIDO` não gastam cota.
+Esta é a parte que mais engana. Quando a tarifa não cabe no espaço restante, cobra-se **o que
+cabe** — não a tarifa inteira, e não zero:
+
+```
+já tarifado = R$ 1.995,00   (teto R$ 2.000,00)
+Pix de R$ 6.000,00 → faixa = R$ 10,00
+   1.995 + 10 = 2.005 > 2.000  →  cobra R$ 5,00, motivo TETO_PARCIAL
+```
+
+Sem esse passo o mês fecharia em R$ 2.005,00, acima do teto contratado. É o que sustenta a
+invariante `valorTarifadoNaCompetencia ≤ teto`.
+
+A alternativa — não cobrar nada quando não cabe — exigiria um sinalizador de "teto atingido"
+separado do acumulador, que precisaria ser ressincronizado a cada estorno. Com a cobrança parcial,
+"teto atingido" é derivável do próprio acumulado, e o estado se recompõe sozinho quando uma
+compensação devolve espaço.
+
+### Por que o motivo é uma coluna, e não só o valor
+
+O motivo não é log: é dado do domínio. Três das cinco saídas valem `0.00` e significam coisas
+diferentes — isento por benefício contratual e gratuito por limite atingido são duas gratuidades
+com significados comerciais opostos. É o motivo que identifica **qual cobrança bateu o teto** (a
+única linha `TETO_PARCIAL` da competência) e permite responder "por que esta empresa pagou este
+valor" sem recalcular nada.
+
+### Só o Pix isento consome franquia
+
+Invariante da especificação: `unidadesFranquiaConsumidas ≤ franquia do plano`. Um Pix tarifado não
+gasta unidade de franquia — ele existe justamente porque não havia mais nenhuma. A decisão não muda
+por isso (uma vez atingido o limite, o contador para nele, e o limite nunca é menor que ele mesmo),
+mas o acumulado fica correto para o fechamento, que o lê para dizer quantas isenções o contrato de
+fato concedeu.
+
+### Vocabulário: a spec e o contrato do fio
+
+A especificação usa nomes de domínio; o evento publicado usa os do contrato. São a mesma coisa:
+
+| Na spec | No contrato e no código |
+|---|---|
+| `idEmpresa` | `clienteId` — também a chave de partição |
+| `idTransacaoPix` | `pixId` |
+| `liquidadoEm` | `ocorridoEm` — de onde sai a competência |
+
+O contrato do fio não foi renomeado de propósito: ele já está publicado pelo `servico-pix` e
+consumido aqui, e trocar os três campos agora quebraria os dois lados sem mudar uma regra sequer.
 
 ### Não existe plano padrão
 
@@ -71,20 +122,40 @@ A busca é pela oferta vigente **na competência do evento**, nunca "a atual". U
 outubro precisa reencontrar o contrato que vigia em agosto e chegar ao mesmo valor de antes — é o
 que torna o fechamento mensal reproduzível, o quarto critério do ADR.
 
+### A tabela de faixas do Plano PJ
+
+Limite inferior inclusivo, superior **exclusivo**. Não há intervalo sem faixa, e nenhum valor
+pertence a duas:
+
+| Faixa | Tarifa |
+|---|---|
+| valor < R$ 500,00 | R$ 0,50 |
+| R$ 500,00 ≤ valor < R$ 1.000,00 | R$ 1,00 |
+| R$ 1.000,00 ≤ valor < R$ 5.000,00 | R$ 5,00 |
+| valor ≥ R$ 5.000,00 | R$ 10,00 |
+
+A fronteira exclusiva **muda dinheiro**, e nos valores redondos, que são os mais comuns numa
+transferência: um Pix de exatamente R$ 500,00 paga R$ 1,00, não R$ 0,50. Por isso a coluna se chama
+`valor_abaixo_de` e não `valor_ate` — "até" se lê como inclusivo, e foi assim que a primeira versão
+desta tabela errou.
+
 ### Clientes de exemplo (dados fictícios, em `schema.sql`)
 
 | cliente_id | vigência | grátis/mês | faixas | teto |
 |---|---|---|---|---|
-| `cli-0001` | 2026-01 → aberta | 5 | ≤500: 1,90 · ≤5000: 3,50 · acima: 7,00 | — |
-| `cli-0002` | 2026-01 → aberta | 2 | única: 3,50 | — |
+| `cli-0001` | 2026-01 → aberta | 10 | **Plano PJ** (as quatro acima) | 2.000,00 |
+| `cli-0002` | 2026-01 → aberta | 2 | Plano PJ | — |
 | `cli-0003` | 2026-01 → aberta | 0 | única: 0,99 | — |
 | `cli-0004` | 2026-01 → 2026-07 | 2 | única: 4,90 | — |
 | `cli-0004` | 2026-08 → aberta | 10 | única: 2,50 | — |
 | `cli-0005` | 2026-01 → **2026-07** | 5 | única: 1,90 | — |
-| `cli-0006` | 2026-01 → aberta | 0 | única: 0,99 | **1,98** |
+| `cli-0006` | 2026-01 → aberta | 0 | única: 10,00 | **25,00** |
 
-`cli-0004` demonstra troca de plano; `cli-0005`, contrato encerrado sem sucessora; `cli-0006`, o
-teto mensal. Qualquer outro `clienteId` cai em `SEM_CONTRATO`.
+`cli-0001` é o Plano PJ tal como a especificação o define. `cli-0002` tem a mesma tabela de faixas
+com franquia curta, para exercitar o fim da franquia sem publicar onze eventos. `cli-0004`
+demonstra troca de plano; `cli-0005`, contrato encerrado sem sucessora; `cli-0006` tem teto baixo
+de propósito, para exercitar `TETO_PARCIAL` e `TETO_ATINGIDO` em quatro Pix em vez de duzentos.
+Qualquer outro `clienteId` cai em `SEM_CONTRATO`.
 
 ---
 
@@ -296,7 +367,7 @@ virada do mês cairia em competências diferentes conforme onde o consumidor rod
 
 ```bash
 mvn spring-boot:run     # precisa do docker compose up -d na raiz
-mvn test                # 12 testes, sem Docker e sem o servico-pix
+mvn test                # 14 testes, sem Docker e sem o servico-pix
 ```
 
 O teste publica **JSON cru** no tópico, não objeto Java — assim ele exercita o contrato do fio,
@@ -318,9 +389,11 @@ justamente o bug que os testes 8 e 9 existem para pegar.
 | 7 | cliente que nunca teve contrato não é cobrado, e não consome franquia |
 | 8 | contrato encerrado: cobre em julho, `SEM_CONTRATO` em agosto |
 | 9 | troca de plano: vale a oferta vigente na competência **do evento** |
-| 10 | acima da franquia, o **valor** do Pix escolhe a faixa da tarifa |
-| 11 | atingido o teto mensal, os Pix seguintes deixam de ser cobrados |
-| 12 | a competência é isolada por mês: a franquia reinicia em setembro |
+| 10 | acima da franquia, o **valor** do Pix escolhe a faixa: 0,50 / 1,00 / 5,00 / 10,00 |
+| 11 | **a fronteira da faixa é exclusiva**: R$ 500,00 paga R$ 1,00, não R$ 0,50 |
+| 12 | **o estouro do teto é cobrado parcialmente** — o acumulado para exatamente no teto |
+| 13 | só o Pix isento consome franquia; o tarifado não |
+| 14 | a competência é isolada por mês: a franquia reinicia em setembro |
 
 ## Configuração relevante
 
