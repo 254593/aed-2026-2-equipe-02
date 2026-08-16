@@ -2,8 +2,12 @@ package br.pucminas.aed.tarifacao;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -18,6 +22,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
@@ -89,6 +95,10 @@ class IdempotenciaTest {
 
     @Autowired
     private TarifacaoRepository repositorio;
+
+    /** Só para o teste 16: escreve na tabela por fora do service, para provocar o CHECK. */
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Value("${spring.embedded.kafka.brokers}")
     private String servidores;
@@ -366,6 +376,31 @@ class IdempotenciaTest {
                 .isEqualTo(1L);
         assertThat(situacoes(EMPRESA_COM_TETO, COMPETENCIA, SituacaoDaTarifaVO.TETO_ATINGIDO))
                 .isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("16 - o banco recusa valor negativo em tarifa: o teto nao reabre")
+    void bancoRecusaValorNegativoEmTarifa() {
+        // O teto e derivado por SUM(valor) sobre a tabela `tarifa`, e o acumulado
+        // precisa ser monotonico. Uma linha negativa — por exemplo, alguem
+        // implementando o estorno da aula 05 como o inverso da cobranca — faria
+        // o SUM decrementar e o teto REABRIR EM SILENCIO, recobrando Pix que ja
+        // tinham saido como TETO_ATINGIDO.
+        //
+        // O CHECK do schema transforma essa regra, que hoje vive em javadoc, em
+        // algo que o banco recusa. Este teste existe para que a constraint nao
+        // seja removida por engano numa migracao futura.
+        assertThatThrownBy(() -> jdbc.update(
+                "INSERT INTO tarifa (evento_id, id_empresa, id_transacao_pix, competencia,"
+                        + " situacao, valor, liquidado_em)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "evt-negativo", EMPRESA_PLANO_PJ, "pix-negativo", COMPETENCIA,
+                SituacaoDaTarifaVO.FAIXA.name(), new BigDecimal("-5.00"),
+                Timestamp.from(Instant.parse(LIQUIDADO_EM))))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThat(repositorio.contarPixNaCompetencia(EMPRESA_PLANO_PJ, COMPETENCIA))
+                .isEqualTo(0L);
     }
 
     // ------------------------------------------------------------------

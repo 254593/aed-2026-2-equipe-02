@@ -57,8 +57,10 @@ isenções usadas, independentemente do teto. Isso mantém o relatório de fecha
 **O estouro do teto é cobrado parcialmente**, até completar exatamente R$ 2.000,00. A alternativa —
 não cobrar nada e marcar o teto como atingido — exigiria um sinalizador de estado separado do
 acumulador, que precisaria ser ressincronizado a cada estorno. Com a cobrança parcial, "teto
-atingido" é derivável de `valorTarifadoNaCompetencia >= 2.000,00`, e o estado se recompõe sozinho
-quando uma compensação devolve espaço.
+atingido" é derivável de `valorTarifadoNaCompetencia >= 2.000,00`, sem nenhum estado à parte.
+
+O acumulado é **monotônico**: uma vez atingido, o teto **não reabre**. Estorno não o decrementa —
+é ajuste de fatura, em acumulador próprio. Ver a seção Compensação.
 
 Na fatura, a linha aparece como tarifa limitada pelo teto contratual.
 

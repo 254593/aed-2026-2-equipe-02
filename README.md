@@ -164,7 +164,7 @@ Roda com Kafka embutido e H2 — **sem Docker e sem o `servico-pix`**:
 mvn -f servico-tarifacao/pom.xml test
 ```
 
-Quinze cenários, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
+Dezesseis cenários, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
 3x produz efeito 1x** · consumidor tolerante a campos desconhecidos · `ce_id` ausente · mesmo
 `idTransacaoPix` com `eventoId` distintos · isenção por franquia · a faixa de valor, com a fronteira
 exclusiva · empresa sem contrato não é cobrada · contrato encerrado · troca de plano respeitando a
