@@ -8,8 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /** Dados recebidos pela API para registrar que um Pix foi realizado. */
 public final class RealizacaoPixVO {
 
-    private final String pixId;
-    private final String clienteId;
+    private final String idTransacaoPix;
+    private final String idEmpresa;
     private final BigDecimal valor;
     private final String chavePix;
     private final String tipoChave;
@@ -18,16 +18,16 @@ public final class RealizacaoPixVO {
     private final String pagadorNome;
 
     @JsonCreator
-    public RealizacaoPixVO(@JsonProperty("pixId") String pixId,
-                           @JsonProperty("clienteId") String clienteId,
+    public RealizacaoPixVO(@JsonProperty("idTransacaoPix") String idTransacaoPix,
+                           @JsonProperty("idEmpresa") String idEmpresa,
                            @JsonProperty("valor") BigDecimal valor,
                            @JsonProperty("chavePix") String chavePix,
                            @JsonProperty("tipoChave") String tipoChave,
                            @JsonProperty("bancoDestino") String bancoDestino,
                            @JsonProperty("endToEndId") String endToEndId,
                            @JsonProperty("pagadorNome") String pagadorNome) {
-        this.pixId = pixId;
-        this.clienteId = clienteId;
+        this.idTransacaoPix = idTransacaoPix;
+        this.idEmpresa = idEmpresa;
         this.valor = valor;
         this.chavePix = chavePix;
         this.tipoChave = tipoChave;
@@ -36,12 +36,12 @@ public final class RealizacaoPixVO {
         this.pagadorNome = pagadorNome;
     }
 
-    public String getPixId() {
-        return pixId;
+    public String getIdTransacaoPix() {
+        return idTransacaoPix;
     }
 
-    public String getClienteId() {
-        return clienteId;
+    public String getIdEmpresa() {
+        return idEmpresa;
     }
 
     public BigDecimal getValor() {

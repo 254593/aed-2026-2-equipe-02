@@ -1,6 +1,6 @@
 {
-  "pixId": "pix-001",
-  "clienteId": "cli-0001",
+  "idTransacaoPix": "pix-001",
+  "idEmpresa": "cli-0001",
   "valor": 150.00,
   "chavePix": "fulano@exemplo.com",
   "tipoChave": "EMAIL",

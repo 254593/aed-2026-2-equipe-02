@@ -25,7 +25,7 @@ class KafkaConfigTest {
 
         String json = objectMapper.writeValueAsString(evento);
 
-        assertThat(json).contains("\"ocorridoEm\":\"2026-08-14T13:00:00Z\"");
+        assertThat(json).contains("\"liquidadoEm\":\"2026-08-14T13:00:00Z\"");
         assertThat(json).doesNotContain("1786712400");
     }
 

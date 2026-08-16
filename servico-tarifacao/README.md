@@ -1,7 +1,7 @@
 # servico-tarifacao — o consumidor
 
-Consome o fato **`PixRealizado`** e decide, para cada Pix, se ele cabe na franquia mensal do
-cliente ou se deve ser tarifado.
+Consome o fato **`PixRealizado`** e decide, para cada Pix, se ele cabe na franquia mensal da
+empresa ou se deve ser tarifado.
 
 Responsável: **Allainn Christiam (1664926)**.
 
@@ -33,7 +33,7 @@ Pix chega
    ↓
 já vi este eventoId?  ──sim──▶  descarta em silêncio, não faz nada
    ↓ não
-qual a competência?  →  mês do ocorridoEm DO EVENTO (não de now())
+qual a competência?  →  mês do liquidadoEm DO EVENTO (não de now())
    ↓
 há oferta vigente NESSA competência?  ──não──▶  SEM_CONTRATO, 0.00
    ↓ sim
@@ -94,27 +94,36 @@ por isso (uma vez atingido o limite, o contador para nele, e o limite nunca é m
 mas o acumulado fica correto para o fechamento, que o lê para dizer quantas isenções o contrato de
 fato concedeu.
 
-### Vocabulário: a spec e o contrato do fio
+### Vocabulário: um só, do documento ao banco
 
-A especificação usa nomes de domínio; o evento publicado usa os do contrato. São a mesma coisa:
+A especificação, o ADR, o contrato do fio, as classes Java e as colunas do banco usam os **mesmos
+nomes**. Não há tradução em lugar nenhum:
 
-| Na spec | No contrato e no código |
-|---|---|
-| `idEmpresa` | `clienteId` — também a chave de partição |
-| `idTransacaoPix` | `pixId` |
-| `liquidadoEm` | `ocorridoEm` — de onde sai a competência |
+| Conceito | No JSON e no Java | No banco |
+|---|---|---|
+| a empresa tarifada | `idEmpresa` — também a chave de partição | `id_empresa` |
+| a transação Pix | `idTransacaoPix` | `id_transacao_pix` |
+| quando o Pix liquidou | `liquidadoEm` — de onde sai a competência | `liquidado_em` |
 
-O contrato do fio não foi renomeado de propósito: ele já está publicado pelo `servico-pix` e
-consumido aqui, e trocar os três campos agora quebraria os dois lados sem mudar uma regra sequer.
+Uma versão anterior deste serviço usava `clienteId`, `pixId` e `ocorridoEm`, e a divergência com a
+especificação foi mantida por um dia sob o argumento de que renomear quebraria os dois lados sem
+mudar regra nenhuma. O argumento estava certo sobre o custo e errado sobre o benefício: duas
+grafias para a mesma coisa é o erro que o enunciado lista como fácil de evitar, e quem lê a spec ao
+lado do código paga esse imposto em toda leitura. Ver [IA.md](../docs/IA.md), interação 8.
+
+**O nome da classe e o do tópico não acompanharam**: seguem `PixRealizadoEvent` e
+`pagamentos.pix.realizado.v1`. A especificação os chama de `PixLiquidado` e `pix.liquidado`, e
+alinhá-los também invalidaria os offsets do grupo e todos os comandos colados neste README — custo
+que não se paga na véspera da entrega. Fica anotado como dívida.
 
 ### Não existe plano padrão
 
-Cliente sem oferta vigente na competência **não é cobrado**. O Pix vira linha — o fato aconteceu e
+Empresa sem oferta vigente na competência **não é cobrada**. O Pix vira linha — o fato aconteceu e
 precisa aparecer na auditoria — com situação `SEM_CONTRATO` e valor zero.
 
 Não há tabela de fallback, e a razão está no ADR-002: cobrar sem contrato vigente é cobrança
 indevida, com exposição a devolução em dobro (CDC, art. 42, parágrafo único). Um plano padrão
-"para não travar a partição" transformaria um erro de cadastro numa cobrança ao cliente.
+"para não travar a partição" transformaria um erro de cadastro numa cobrança à empresa.
 
 ### A oferta tem vigência
 
@@ -139,9 +148,9 @@ transferência: um Pix de exatamente R$ 500,00 paga R$ 1,00, não R$ 0,50. Por i
 `valor_abaixo_de` e não `valor_ate` — "até" se lê como inclusivo, e foi assim que a primeira versão
 desta tabela errou.
 
-### Clientes de exemplo (dados fictícios, em `schema.sql`)
+### Empresas de exemplo (dados fictícios, em `schema.sql`)
 
-| cliente_id | vigência | grátis/mês | faixas | teto |
+| id_empresa | vigência | grátis/mês | faixas | teto |
 |---|---|---|---|---|
 | `cli-0001` | 2026-01 → aberta | 10 | **Plano PJ** (as quatro acima) | 2.000,00 |
 | `cli-0002` | 2026-01 → aberta | 2 | Plano PJ | — |
@@ -155,7 +164,7 @@ desta tabela errou.
 com franquia curta, para exercitar o fim da franquia sem publicar onze eventos. `cli-0004`
 demonstra troca de plano; `cli-0005`, contrato encerrado sem sucessora; `cli-0006` tem teto baixo
 de propósito, para exercitar `TETO_PARCIAL` e `TETO_ATINGIDO` em quatro Pix em vez de duzentos.
-Qualquer outro `clienteId` cai em `SEM_CONTRATO`.
+Qualquer outro `idEmpresa` cai em `SEM_CONTRATO`.
 
 ---
 
@@ -175,22 +184,22 @@ publica é o dono do tópico; o consumidor não o declara. (O `docker-compose.ym
 `KAFKA_NUM_PARTITIONS: 3` como rede de segurança, para o caso de o tópico nascer por
 auto-criação.)
 
-### 2. A chave de partição: `clienteId`
+### 2. A chave de partição: `idEmpresa`
 
 **Esta é a exigência que não pode ser negociada por conveniência.**
 
 ```java
 new ProducerRecord<>(topico, evento.getClienteId(), evento);
-//                           ^^^^^^^^^^^^^^^^^^^^^ nem pixId, nem eventoId
+//                           ^^^^^^^^^^^^^^^^^^^^^ nem idTransacaoPix, nem eventoId
 ```
 
 Por quê: decidir se um Pix é isento é um *read-then-write* — o consumidor lê quantos Pix o
-cliente já fez no mês, decide, e só então grava. Se dois Pix do mesmo cliente caírem em
+cliente já fez no mês, decide, e só então grava. Se dois Pix da mesma empresa caírem em
 **partições diferentes**, eles são processados em paralelo por consumidores distintos do grupo;
 os dois leem "4 usados" contra uma franquia de 5 e os dois saem isentos. A franquia estoura, e o
 bug só aparece sob concorrência.
 
-Com `clienteId` como chave, todos os Pix de um cliente caem na mesma partição, onde a ordem é
+Com `idEmpresa` como chave, todos os Pix de uma empresa caem na mesma partição, onde a ordem é
 total e o processamento é serial. Não há lock no banco justamente porque a chave já garante isso.
 
 ### 3. Os cabeçalhos — CloudEvents 1.0 em modo binário
@@ -203,7 +212,7 @@ Cinco cabeçalhos, todos como `byte[]` em UTF-8:
 | `ce_id` | o `eventoId` — **é a chave de deduplicação** | sim (spec) |
 | `ce_source` | `/pagamentos/servico-pix` | sim (spec) |
 | `ce_type` | `pagamentos.pix.realizado.v1` | sim (spec) |
-| `ce_time` | o `ocorridoEm` em ISO-8601 | sim, para nós |
+| `ce_time` | o `liquidadoEm` em ISO-8601 | sim, para nós |
 
 ```java
 registro.headers().add("ce_specversion", "1.0".getBytes(UTF_8));
@@ -225,9 +234,9 @@ do contrato.
 ```json
 {
   "eventoId":     "3f2b8c10-9a4e-4f77-8f31-6b0a2d5e7c11",
-  "ocorridoEm":   "2026-08-14T13:00:00.000Z",
-  "pixId":        "pix-001",
-  "clienteId":    "cli-0001",
+  "liquidadoEm":   "2026-08-14T13:00:00.000Z",
+  "idTransacaoPix":        "pix-001",
+  "idEmpresa":    "cli-0001",
   "valor":        150.00,
   "chavePix":     "fulano@exemplo.com",
   "tipoChave":    "EMAIL",
@@ -239,10 +248,10 @@ do contrato.
 
 | Campo | O consumidor usa? | Observação |
 |---|---|---|
-| `eventoId` | sim (rede de segurança) | identidade do **fato**; distinto do `pixId` |
-| `ocorridoEm` | **sim** | define a competência. ISO-8601, **nunca epoch** |
-| `pixId` | sim | identidade da **transação**; vai para o registro da tarifa |
-| `clienteId` | **sim** | de quem é a franquia, e a chave de partição |
+| `eventoId` | sim (rede de segurança) | identidade do **fato**; distinto do `idTransacaoPix` |
+| `liquidadoEm` | **sim** | define a competência. ISO-8601, **nunca epoch** |
+| `idTransacaoPix` | sim | identidade da **transação**; vai para o registro da tarifa |
+| `idEmpresa` | **sim** | de quem é a franquia, e a chave de partição |
 | `valor` | **sim** | escolhe a faixa de tarifa do plano |
 | `chavePix`, `tipoChave`, `bancoDestino`, `endToEndId`, `pagadorNome` | **não** | ignorados de propósito |
 
@@ -251,7 +260,7 @@ enunciado pede no B.3. `PixRealizadoEvent` declara menos campos do que o `servic
 `@JsonIgnoreProperties(ignoreUnknown = true)` faz o resto. Pode acrescentar campos novos à
 vontade — o consumidor não quebra.
 
-**Os quatro primeiros campos são obrigatórios.** `eventoId`, `ocorridoEm`, `pixId` e `clienteId`
+**Os quatro primeiros campos são obrigatórios.** `eventoId`, `liquidadoEm`, `idTransacaoPix` e `idEmpresa`
 passam por `Objects.requireNonNull` no construtor; faltando qualquer um, a desserialização falha.
 
 ### 5. Datas em ISO-8601, nunca epoch
@@ -271,10 +280,10 @@ tarifado — o consumidor pode nem estar rodando. 202 é honesto sobre a consist
 ### Checklist rápido do publicador
 
 - [ ] tópico `pagamentos.pix.realizado.v1`, 3 partições, declarado via `NewTopic`
-- [ ] chave de partição = `clienteId`
+- [ ] chave de partição = `idEmpresa`
 - [ ] os cinco cabeçalhos `ce_*`
 - [ ] `ce_id` igual ao `eventoId` do corpo
-- [ ] `ocorridoEm` em ISO-8601 no corpo (ObjectMapper configurado)
+- [ ] `liquidadoEm` em ISO-8601 no corpo (ObjectMapper configurado)
 - [ ] os quatro campos obrigatórios sempre presentes
 - [ ] retorno do `send()` tratado numa classe nomeada
 - [ ] endpoint HTTP responde 202
@@ -335,7 +344,7 @@ A deduplicação e o efeito acontecem na **mesma transação**. Em transações 
 janela em que o processo morre entre as duas e o evento é reprocessado — exatamente o que se
 queria evitar.
 
-**Por que a chave de deduplicação é o `eventoId`, e não o `pixId`:** dois eventos *diferentes*
+**Por que a chave de deduplicação é o `eventoId`, e não o `idTransacaoPix`:** dois eventos *diferentes*
 podem falar do mesmo Pix — um `PixRealizado` hoje e um `PixDevolvido` amanhã. Deduplicar pela
 entidade descartaria o segundo como se fosse repetição do primeiro.
 
@@ -374,7 +383,7 @@ O teste publica **JSON cru** no tópico, não objeto Java — assim ele exercita
 como faria um produtor escrito em outra linguagem. Se o `servico-pix` mudar o formato, é este
 teste que precisa quebrar.
 
-Nenhum `Instant.now()` em lugar nenhum: cada evento carrega um `ocorridoEm` fixo, e é dele que sai
+Nenhum `Instant.now()` em lugar nenhum: cada evento carrega um `liquidadoEm` fixo, e é dele que sai
 a competência. Um teste que dependesse do relógio falharia na virada do mês e, pior, esconderia
 justamente o bug que os testes 8 e 9 existem para pegar.
 
@@ -385,7 +394,7 @@ justamente o bug que os testes 8 e 9 existem para pegar.
 | 3 | o Pix seguinte ao fim da franquia é tarifado |
 | 4 | campos que o consumidor não declara são ignorados |
 | 5 | mensagem sem `ce_id` cai no `eventoId` do corpo e continua idempotente |
-| 6 | mesmo `pixId` com `eventoId` distintos são dois fatos, não reentrega |
+| 6 | mesmo `idTransacaoPix` com `eventoId` distintos são dois fatos, não reentrega |
 | 7 | cliente que nunca teve contrato não é cobrado, e não consome franquia |
 | 8 | contrato encerrado: cobre em julho, `SEM_CONTRATO` em agosto |
 | 9 | troca de plano: vale a oferta vigente na competência **do evento** |

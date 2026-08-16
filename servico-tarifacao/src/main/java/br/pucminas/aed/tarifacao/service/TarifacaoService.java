@@ -44,14 +44,14 @@ import br.pucminas.aed.tarifacao.domain.PixRealizadoEvent;
  *    queria evitar. Como o commit termina aqui, o ack la no listener so
  *    acontece depois dele.
  *
- * 2. A competencia sai do ocorridoEm do EVENTO, nunca de now(). Um replay do
+ * 2. A competencia sai do liquidadoEm do EVENTO, nunca de now(). Um replay do
  *    topico feito em outubro tem que continuar tarifando contra agosto. E o
  *    mesmo motivo pelo qual a OFERTA tambem e buscada por competencia, e nao
  *    "a vigente hoje": se qualquer um dos dois olhasse o relogio, o
  *    reprocessamento produziria um valor diferente do original e o fechamento
  *    mensal deixaria de ser reproduzivel.
  *
- * 3. Nao ha plano padrao para cliente sem contrato. Cobrar sem contrato
+ * 3. Nao ha plano padrao para empresa sem contrato. Cobrar sem contrato
  *    vigente e cobranca indevida, com exposicao a devolucao em dobro (CDC,
  *    art. 42, paragrafo unico) — o ADR-002 declara isso como a regra que
  *    sustenta o recorte. O Pix vira linha mesmo assim, com situacao
@@ -60,14 +60,14 @@ import br.pucminas.aed.tarifacao.domain.PixRealizadoEvent;
  *
  * 4. A contagem da franquia e um read-then-write, e quem a serializa e a CHAVE
  *    DE PARTICAO, nao um lock no banco. Como o servico-pix publica com
- *    clienteId como chave, todos os Pix de um cliente caem na mesma particao e
- *    sao processados em serie por um unico consumidor do grupo. Se a chave
- *    fosse o pixId, dois Pix do mesmo cliente cairiam em particoes diferentes,
- *    seriam processados em paralelo, os dois leriam "4 usados" e os dois
- *    sairiam isentos: a franquia estouraria. O mesmo raciocinio vale para o
- *    teto mensal, que tambem le antes de escrever.
+ *    idEmpresa como chave, todos os Pix de uma empresa caem na mesma particao
+ *    e sao processados em serie por um unico consumidor do grupo. Se a chave
+ *    fosse o idTransacaoPix, dois Pix da mesma empresa cairiam em particoes
+ *    diferentes, seriam processados em paralelo, os dois leriam "4 usados" e
+ *    os dois sairiam isentos: a franquia estouraria. O mesmo raciocinio vale
+ *    para o teto mensal, que tambem le antes de escrever.
  *
- *    O custo aceito e o outro lado do mesmo eixo: um cliente de volume muito
+ *    O custo aceito e o outro lado do mesmo eixo: uma empresa de volume muito
  *    alto concentra carga numa particao (hot partition). Se isso aparecer, a
  *    saida e rever a granularidade da chave — nao aumentar particoes, porque
  *    isso rebate o hash e quebra a ordem das chaves ja existentes.
@@ -99,8 +99,8 @@ public class TarifacaoService {
 
         repositorio.registrarTarifa(evento, competencia, decisao);
 
-        log.info("pix processado  evento={}  cliente={}  competencia={}  situacao={}  valor={}",
-                eventoId, evento.getClienteId(), competencia,
+        log.info("pix processado  evento={}  empresa={}  competencia={}  situacao={}  valor={}",
+                eventoId, evento.getIdEmpresa(), competencia,
                 decisao.getSituacao(), decisao.getValor());
         return true;
     }
@@ -125,14 +125,14 @@ public class TarifacaoService {
     private DecisaoDeTarifacaoVO decidir(PixRealizadoEvent evento, String competencia) {
 
         Optional<OfertaVO> vigente =
-                repositorio.buscarOfertaVigente(evento.getClienteId(), competencia);
+                repositorio.buscarOfertaVigente(evento.getIdEmpresa(), competencia);
 
         if (vigente.isEmpty()) {
             return DecisaoDeTarifacaoVO.semContrato();
         }
         OfertaVO oferta = vigente.get();
 
-        long consumidas = repositorio.contarFranquiaConsumida(evento.getClienteId(), competencia);
+        long consumidas = repositorio.contarFranquiaConsumida(evento.getIdEmpresa(), competencia);
         if (consumidas < oferta.getPixGratuitosMes()) {
             return DecisaoDeTarifacaoVO.isentoPorFranquia();
         }
@@ -143,7 +143,7 @@ public class TarifacaoService {
             return DecisaoDeTarifacaoVO.tarifadoPelaFaixa(tarifa);
         }
 
-        return aplicarTeto(oferta, evento.getClienteId(), competencia, tarifa);
+        return aplicarTeto(oferta, evento.getIdEmpresa(), competencia, tarifa);
     }
 
     /**
@@ -164,11 +164,11 @@ public class TarifacaoService {
      * 2000 de 2000.00 pela escala, e a igualdade por equals falharia conforme a
      * escala que o banco devolvesse.
      */
-    private DecisaoDeTarifacaoVO aplicarTeto(OfertaVO oferta, String clienteId,
+    private DecisaoDeTarifacaoVO aplicarTeto(OfertaVO oferta, String idEmpresa,
             String competencia, BigDecimal tarifa) {
 
         BigDecimal teto = oferta.getTetoMensal();
-        BigDecimal jaCobrado = repositorio.totalTarifadoNaCompetencia(clienteId, competencia);
+        BigDecimal jaCobrado = repositorio.totalTarifadoNaCompetencia(idEmpresa, competencia);
 
         if (jaCobrado.compareTo(teto) >= 0) {
             return DecisaoDeTarifacaoVO.tetoAtingido();
@@ -187,6 +187,6 @@ public class TarifacaoService {
      * competencias diferentes conforme onde o consumidor estivesse rodando.
      */
     private String competenciaDe(PixRealizadoEvent evento) {
-        return YearMonth.from(evento.getOcorridoEm().atZone(ZoneOffset.UTC)).toString();
+        return YearMonth.from(evento.getLiquidadoEm().atZone(ZoneOffset.UTC)).toString();
     }
 }

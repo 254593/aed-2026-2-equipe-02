@@ -69,7 +69,7 @@ class PixServiceTest {
         assertThat(registro.topic()).isEqualTo(TOPICO);
         assertThat(registro.key()).isEqualTo("cli-0001");
         assertThat(registro.value()).isSameAs(evento);
-        assertThat(evento.getOcorridoEm()).isEqualTo("2026-08-14T13:00:00Z");
+        assertThat(evento.getLiquidadoEm()).isEqualTo("2026-08-14T13:00:00Z");
         assertThat(cabecalho(registro, "ce_specversion")).isEqualTo("1.0");
         assertThat(cabecalho(registro, "ce_id")).isEqualTo(evento.getEventoId());
         assertThat(cabecalho(registro, "ce_source")).isEqualTo(ORIGEM);
@@ -85,8 +85,8 @@ class PixServiceTest {
     }
 
     @Test
-    @org.junit.jupiter.api.DisplayName("lanca excecao quando pixId e branco")
-    void lancaExcecaoQuandoPixIdEmBranco() {
+    @org.junit.jupiter.api.DisplayName("lanca excecao quando idTransacaoPix e branco")
+    void lancaExcecaoQuandoIdTransacaoPixEmBranco() {
         RealizacaoPixVO realizacao = new RealizacaoPixVO(
                 "", "cli-0001", new BigDecimal("150.00"),
                 "fulano@exemplo.com", "EMAIL", "999",
@@ -97,8 +97,8 @@ class PixServiceTest {
     }
 
     @Test
-    @org.junit.jupiter.api.DisplayName("lanca excecao quando clienteId e branco")
-    void lancaExcecaoQuandoClienteIdEmBranco() {
+    @org.junit.jupiter.api.DisplayName("lanca excecao quando idEmpresa e branco")
+    void lancaExcecaoQuandoIdEmpresaEmBranco() {
         RealizacaoPixVO realizacao = new RealizacaoPixVO(
                 "pix-001", "", new BigDecimal("150.00"),
                 "fulano@exemplo.com", "EMAIL", "999",

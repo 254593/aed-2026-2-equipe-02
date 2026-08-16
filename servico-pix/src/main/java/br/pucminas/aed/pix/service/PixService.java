@@ -57,8 +57,8 @@ public class PixService {
         PixRealizadoEvent evento = new PixRealizadoEvent(
                 UUID.randomUUID().toString(),
                 Instant.now(relogio),
-                realizacao.getPixId(),
-                realizacao.getClienteId(),
+                realizacao.getIdTransacaoPix(),
+                realizacao.getIdEmpresa(),
                 realizacao.getValor(),
                 realizacao.getChavePix(),
                 realizacao.getTipoChave(),
@@ -67,7 +67,7 @@ public class PixService {
                 realizacao.getPagadorNome());
 
         ProducerRecord<String, Object> registro =
-                new ProducerRecord<String, Object>(topico, evento.getClienteId(), evento);
+                new ProducerRecord<String, Object>(topico, evento.getIdEmpresa(), evento);
         adicionarCabecalhos(registro, evento);
 
         CompletableFuture<SendResult<String, Object>> resultado = clienteDoBroker.send(registro);
@@ -81,18 +81,18 @@ public class PixService {
         registro.headers().add("ce_id", evento.getEventoId().getBytes(UTF_8));
         registro.headers().add("ce_source", origem.getBytes(UTF_8));
         registro.headers().add("ce_type", tipo.getBytes(UTF_8));
-        registro.headers().add("ce_time", evento.getOcorridoEm().toString().getBytes(UTF_8));
+        registro.headers().add("ce_time", evento.getLiquidadoEm().toString().getBytes(UTF_8));
     }
 
     private void validar(RealizacaoPixVO realizacao) {
         if (realizacao == null) {
             throw new IllegalArgumentException("Os dados do Pix sao obrigatorios");
         }
-        if (realizacao.getPixId() == null || realizacao.getPixId().isBlank()) {
-            throw new IllegalArgumentException("pixId e obrigatorio");
+        if (realizacao.getIdTransacaoPix() == null || realizacao.getIdTransacaoPix().isBlank()) {
+            throw new IllegalArgumentException("idTransacaoPix e obrigatorio");
         }
-        if (realizacao.getClienteId() == null || realizacao.getClienteId().isBlank()) {
-            throw new IllegalArgumentException("clienteId e obrigatorio");
+        if (realizacao.getIdEmpresa() == null || realizacao.getIdEmpresa().isBlank()) {
+            throw new IllegalArgumentException("idEmpresa e obrigatorio");
         }
         if (realizacao.getValor() == null
                 || realizacao.getValor().compareTo(BigDecimal.ZERO) <= 0) {

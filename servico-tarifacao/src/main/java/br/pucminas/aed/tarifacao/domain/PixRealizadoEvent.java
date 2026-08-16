@@ -37,28 +37,28 @@ public final class PixRealizadoEvent {
     private final String eventoId;
 
     /** Quando o Pix aconteceu no dominio — nao quando o broker recebeu a mensagem. */
-    private final Instant ocorridoEm;
+    private final Instant liquidadoEm;
 
     /** Identidade da TRANSACAO de negocio. Nao confundir com o eventoId. */
-    private final String pixId;
+    private final String idTransacaoPix;
 
     /** De quem e a franquia mensal que este Pix consome. */
-    private final String clienteId;
+    private final String idEmpresa;
 
     /** Valor transferido. Nao entra no calculo hoje, mas fica no registro da tarifa. */
     private final BigDecimal valor;
 
     @JsonCreator
     public PixRealizadoEvent(@JsonProperty("eventoId") String eventoId,
-                             @JsonProperty("ocorridoEm") Instant ocorridoEm,
-                             @JsonProperty("pixId") String pixId,
-                             @JsonProperty("clienteId") String clienteId,
+                             @JsonProperty("liquidadoEm") Instant liquidadoEm,
+                             @JsonProperty("idTransacaoPix") String idTransacaoPix,
+                             @JsonProperty("idEmpresa") String idEmpresa,
                              @JsonProperty("valor") BigDecimal valor) {
 
         this.eventoId = Objects.requireNonNull(eventoId, "eventoId e obrigatorio");
-        this.ocorridoEm = Objects.requireNonNull(ocorridoEm, "ocorridoEm e obrigatorio");
-        this.pixId = Objects.requireNonNull(pixId, "pixId e obrigatorio");
-        this.clienteId = Objects.requireNonNull(clienteId, "clienteId e obrigatorio");
+        this.liquidadoEm = Objects.requireNonNull(liquidadoEm, "liquidadoEm e obrigatorio");
+        this.idTransacaoPix = Objects.requireNonNull(idTransacaoPix, "idTransacaoPix e obrigatorio");
+        this.idEmpresa = Objects.requireNonNull(idEmpresa, "idEmpresa e obrigatorio");
         this.valor = valor;
     }
 
@@ -66,16 +66,16 @@ public final class PixRealizadoEvent {
         return eventoId;
     }
 
-    public Instant getOcorridoEm() {
-        return ocorridoEm;
+    public Instant getLiquidadoEm() {
+        return liquidadoEm;
     }
 
-    public String getPixId() {
-        return pixId;
+    public String getIdTransacaoPix() {
+        return idTransacaoPix;
     }
 
-    public String getClienteId() {
-        return clienteId;
+    public String getIdEmpresa() {
+        return idEmpresa;
     }
 
     public BigDecimal getValor() {
@@ -85,7 +85,7 @@ public final class PixRealizadoEvent {
     @Override
     public String toString() {
         return "PixRealizadoEvent{eventoId=" + eventoId
-                + ", pixId=" + pixId
-                + ", clienteId=" + clienteId + "}";
+                + ", idTransacaoPix=" + idTransacaoPix
+                + ", idEmpresa=" + idEmpresa + "}";
     }
 }

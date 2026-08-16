@@ -220,6 +220,46 @@ especificação, não do código, e foram escritos para falhar antes de passar.
 
 ---
 
+#### 8. A recusa da interação 7, revertida — e por que a reversão também é uma decisão
+
+**Pedido** (16/08). Sincronizar os campos entre consumidor, publicador e documentos, adotando em
+todos o vocabulário da especificação.
+
+**O que isso contradiz.** A interação 7, do dia anterior, registra a recusa de fazer exatamente
+isto. Aquela recusa não é apagada aqui de propósito: ela mostra o critério que existia no momento —
+custo alto, benefício zero em comportamento, véspera de prazo — e este registro mostra por que o
+critério mudou.
+
+**Por que a recusa não se sustentou.** O argumento era que renomear quebraria os dois lados sem
+mudar uma regra de negócio. A parte factual estava certa: nenhuma regra mudou, e os 25 testes
+passaram antes e depois. O erro estava em tratar "não muda comportamento" como se fosse "não tem
+benefício". Duas grafias para a mesma coisa é o erro que a seção 9 do enunciado lista como fácil de
+evitar, e o custo dele não aparece em teste nenhum — aparece em cada leitura em que alguém precisa
+traduzir `idEmpresa` da spec para `clienteId` do código. A tabela de equivalência que eu tinha
+proposto como paliativo era, ela mesma, a prova do problema: um documento que existe só para
+traduzir dois nomes da mesma coisa.
+
+**Aceito.** `clienteId` → `idEmpresa`, `pixId` → `idTransacaoPix`, `ocorridoEm` → `liquidadoEm`,
+no contrato do fio, nas classes dos dois serviços, nas colunas das quatro tabelas, no ADR-002 e nos
+READMEs. A prosa acompanhou: onde se lia "cliente", agora se lê "empresa", porque o domínio é de
+contas PJ.
+
+**RECUSADO — renomear também a classe e o tópico.** A especificação chama o fato de `PixLiquidado`
+e o log de `pix.liquidado`; aqui seguem `PixRealizadoEvent` e `pagamentos.pix.realizado.v1`. Razão
+técnica: o `ce_type` acompanha o nome do tópico, e trocá-lo invalidaria os offsets do grupo
+`tarifacao` e todos os comandos colados nos READMEs e nos scripts — sem que nada disso melhore a
+leitura, já que o nome do evento é coerente e está no particípio nas duas grafias. Fica anotado
+como dívida no README do consumidor, para ser paga numa etapa em que o tópico já vá mudar por outro
+motivo.
+
+**O que a ferramenta fez de errado aqui, e vale registrar.** O rename mecânico por `sed` trocou os
+identificadores mas deixou a prosa dos comentários falando em "cliente", e criou uma concordância
+quebrada ("dois Pix do mesma empresa") e um trecho de README que passou a afirmar o contrário do
+que o commit fazia — "o contrato do fio não foi renomeado de propósito". Nada disso quebra teste, e
+por isso nada disso seria pego por uma bateria verde. Foi encontrado relendo os arquivos.
+
+---
+
 <!--
   Demais integrantes: acrescentem a sua subseção abaixo, no mesmo formato
   (### Nome (matrícula) — parte pela qual respondeu).

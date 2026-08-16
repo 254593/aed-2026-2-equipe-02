@@ -87,8 +87,8 @@ As mensagens são publicadas como JSON cru para exercitar o contrato do fio, nã
 | # | Método | O que valida |
 |---|---|---|
 | 5 | `ceIdAusenteUsaFallbackDoCorpo` | Sem o header `ce_id` o listener cai no `eventoId` do corpo, registra `WARN` e ainda deduplica na reentrega |
-| 6 | `deduplicacaoUsaEventoIdNaoPixId` | Dois eventos com `eventoId` distintos e mesmo `pixId` geram dois efeitos — a chave de deduplicação é a identidade do fato, não a da entidade |
-| 14 | `competenciaEIsoladaPorMes` | A franquia de agosto não contamina setembro: a competência vem do `ocorridoEm` do evento, nunca do relógio |
+| 6 | `deduplicacaoUsaEventoIdNaoIdTransacaoPix` | Dois eventos com `eventoId` distintos e mesmo `idTransacaoPix` geram dois efeitos — a chave de deduplicação é a identidade do fato, não a da entidade |
+| 14 | `competenciaEIsoladaPorMes` | A franquia de agosto não contamina setembro: a competência vem do `liquidadoEm` do evento, nunca do relógio |
 
 ### As cinco saídas da política (Allainn Christiam)
 
@@ -100,8 +100,8 @@ que os testes anteriores não pegavam — a fronteira das faixas e o estouro do 
 
 | # | Método | O que valida |
 |---|---|---|
-| 7 | `clienteSemContratoNaoECobrado` | Cliente sem contrato vira linha `SEM_CONTRATO`, valor 0,00, e **não consome franquia**. Substitui um teste anterior que exigia o oposto (plano padrão de R$ 1,90) e contradizia o ADR |
-| 8 | `contratoEncerradoDeixaDeSerCobrado` | O mesmo cliente é cobrado em julho, quando havia contrato, e sai `SEM_CONTRATO` em agosto, quando não há |
+| 7 | `empresaSemContratoNaoECobrada` | Empresa sem contrato vira linha `SEM_CONTRATO`, valor 0,00, e **não consome franquia**. Substitui um teste anterior que exigia o oposto (plano padrão de R$ 1,90) e contradizia o ADR |
+| 8 | `contratoEncerradoDeixaDeSerCobrado` | A mesma empresa é cobrada em julho, quando havia contrato, e sai `SEM_CONTRATO` em agosto, quando não há |
 | 9 | `ofertaEBuscadaPelaCompetenciaDoEvento` | Troca de plano: um evento de julho reprocessado hoje reencontra o plano **de julho**. É o que torna o fechamento mensal reproduzível |
 | 10 | `tarifaVemDaFaixaDoValor` | Acima da franquia, o valor do Pix escolhe a faixa: R$ 0,50 / 1,00 / 5,00 / 10,00 |
 | 11 | `fronteiraDaFaixaEExclusiva` | Limite superior **exclusivo**: um Pix de exatamente R$ 500,00 paga R$ 1,00, não R$ 0,50 |
@@ -121,9 +121,9 @@ Arquivos:
 
 | Arquivo | Método | O que valida |
 |---|---|---|
-| `KafkaConfigTest` | `serializaDataEmIso8601ENaoEmEpoch` | `ObjectMapper` serializa `ocorridoEm` como ISO-8601, nunca como epoch |
+| `KafkaConfigTest` | `serializaDataEmIso8601ENaoEmEpoch` | `ObjectMapper` serializa `liquidadoEm` como ISO-8601, nunca como epoch |
 | `KafkaConfigTest` | `declaraTopicoComTresParticoes` | Tópico criado com 3 partições |
-| `PixServiceTest` | `publicaContratoEsperadoPeloConsumidor` | Tópico correto, chave de partição = `clienteId`, os 5 headers `ce_*` obrigatórios, `ce_id` = `eventoId` do evento |
+| `PixServiceTest` | `publicaContratoEsperadoPeloConsumidor` | Tópico correto, chave de partição = `idEmpresa`, os 5 headers `ce_*` obrigatórios, `ce_id` = `eventoId` do evento |
 | `PixControllerTest` | `responde202QuandoPublicacaoEConfiadaAoKafka` | Controller retorna 202 quando a publicação é delegada ao Kafka |
 
 ### Testes adicionais (Alexsander da Silva)
@@ -131,8 +131,8 @@ Arquivos:
 | Arquivo | Método | O que valida |
 |---|---|---|
 | `PixServiceTest` | `lancaExcecaoQuandoRealizacaoENula` | `realizar(null)` lança `IllegalArgumentException` antes de qualquer publicação |
-| `PixServiceTest` | `lancaExcecaoQuandoPixIdEmBranco` | `pixId` vazio lança exceção |
-| `PixServiceTest` | `lancaExcecaoQuandoClienteIdEmBranco` | `clienteId` vazio lança exceção |
+| `PixServiceTest` | `lancaExcecaoQuandoIdTransacaoPixEmBranco` | `idTransacaoPix` vazio lança exceção |
+| `PixServiceTest` | `lancaExcecaoQuandoIdEmpresaEmBranco` | `idEmpresa` vazio lança exceção |
 | `PixServiceTest` | `lancaExcecaoQuandoValorEZero` | `valor = 0` é rejeitado (só valor > 0 é aceito) |
 | `PixServiceTest` | `lancaExcecaoQuandoValorENegativo` | `valor < 0` é rejeitado |
 | `PixServiceTest` | `eventoIdUnicoACadaChamada` | Dois `realizar()` com mesmo payload geram `eventoId` distintos — cada fato tem identidade própria |

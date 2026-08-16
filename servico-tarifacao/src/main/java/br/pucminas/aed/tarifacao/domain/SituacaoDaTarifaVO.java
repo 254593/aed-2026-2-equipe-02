@@ -51,7 +51,7 @@ public enum SituacaoDaTarifaVO {
     }
 
     /**
-     * Se esta linha conta contra a franquia mensal do cliente.
+     * Se esta linha conta contra a franquia mensal da empresa.
      *
      * SO O PIX ISENTO CONSOME. Um Pix tarifado nao gasta unidade de franquia —
      * ele existe justamente porque nao havia mais nenhuma. Manter a contagem

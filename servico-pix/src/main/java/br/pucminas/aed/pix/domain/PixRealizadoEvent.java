@@ -14,9 +14,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public final class PixRealizadoEvent {
 
     private final String eventoId;
-    private final Instant ocorridoEm;
-    private final String pixId;
-    private final String clienteId;
+    private final Instant liquidadoEm;
+    private final String idTransacaoPix;
+    private final String idEmpresa;
     private final BigDecimal valor;
     private final String chavePix;
     private final String tipoChave;
@@ -26,9 +26,9 @@ public final class PixRealizadoEvent {
 
     @JsonCreator
     public PixRealizadoEvent(@JsonProperty("eventoId") String eventoId,
-                             @JsonProperty("ocorridoEm") Instant ocorridoEm,
-                             @JsonProperty("pixId") String pixId,
-                             @JsonProperty("clienteId") String clienteId,
+                             @JsonProperty("liquidadoEm") Instant liquidadoEm,
+                             @JsonProperty("idTransacaoPix") String idTransacaoPix,
+                             @JsonProperty("idEmpresa") String idEmpresa,
                              @JsonProperty("valor") BigDecimal valor,
                              @JsonProperty("chavePix") String chavePix,
                              @JsonProperty("tipoChave") String tipoChave,
@@ -36,9 +36,9 @@ public final class PixRealizadoEvent {
                              @JsonProperty("endToEndId") String endToEndId,
                              @JsonProperty("pagadorNome") String pagadorNome) {
         this.eventoId = Objects.requireNonNull(eventoId, "eventoId e obrigatorio");
-        this.ocorridoEm = Objects.requireNonNull(ocorridoEm, "ocorridoEm e obrigatorio");
-        this.pixId = Objects.requireNonNull(pixId, "pixId e obrigatorio");
-        this.clienteId = Objects.requireNonNull(clienteId, "clienteId e obrigatorio");
+        this.liquidadoEm = Objects.requireNonNull(liquidadoEm, "liquidadoEm e obrigatorio");
+        this.idTransacaoPix = Objects.requireNonNull(idTransacaoPix, "idTransacaoPix e obrigatorio");
+        this.idEmpresa = Objects.requireNonNull(idEmpresa, "idEmpresa e obrigatorio");
         this.valor = valor;
         this.chavePix = chavePix;
         this.tipoChave = tipoChave;
@@ -51,16 +51,16 @@ public final class PixRealizadoEvent {
         return eventoId;
     }
 
-    public Instant getOcorridoEm() {
-        return ocorridoEm;
+    public Instant getLiquidadoEm() {
+        return liquidadoEm;
     }
 
-    public String getPixId() {
-        return pixId;
+    public String getIdTransacaoPix() {
+        return idTransacaoPix;
     }
 
-    public String getClienteId() {
-        return clienteId;
+    public String getIdEmpresa() {
+        return idEmpresa;
     }
 
     public BigDecimal getValor() {
@@ -90,8 +90,8 @@ public final class PixRealizadoEvent {
     @Override
     public String toString() {
         return "PixRealizadoEvent{eventoId=" + eventoId
-                + ", pixId=" + pixId
-                + ", clienteId=" + clienteId + "}";
+                + ", idTransacaoPix=" + idTransacaoPix
+                + ", idEmpresa=" + idEmpresa + "}";
     }
 }
 

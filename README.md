@@ -99,10 +99,10 @@ curl.exe -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:8080/pix/realiza
 ```
 
 A requisição leva um `RealizacaoPixVO` (o pedido); a resposta devolve o `PixRealizadoEvent` (o
-fato), já com o `eventoId` sorteado e o `ocorridoEm` em ISO-8601. Campo obrigatório faltando ou
+fato), já com o `eventoId` sorteado e o `liquidadoEm` em ISO-8601. Campo obrigatório faltando ou
 valor menor ou igual a zero responde **400** com o motivo no corpo.
 
-Para gastar a franquia, repita o comando trocando o `pixId` — o `eventoId` é sorteado a cada
+Para gastar a franquia, repita o comando trocando o `idTransacaoPix` — o `eventoId` é sorteado a cada
 chamada, então cada requisição é um fato novo.
 
 A resposta é **202 Accepted**, não 200: no instante da resposta o Pix ainda não foi tarifado.
@@ -112,11 +112,11 @@ A resposta é **202 Accepted**, não 200: no instante da resposta o Pix ainda n�
 Dá para exercitar o consumidor sozinho, publicando direto no tópico:
 
 ```bash
-printf 'ce_specversion=1.0;ce_id=evt-001;ce_source=/pagamentos/servico-pix;ce_type=pagamentos.pix.realizado.v1;ce_time=2026-08-14T13:00:00.000Z#cli-0001~{"eventoId":"evt-001","ocorridoEm":"2026-08-14T13:00:00.000Z","pixId":"pix-001","clienteId":"cli-0001","valor":150.00,"chavePix":"fulano@exemplo.com","tipoChave":"EMAIL","bancoDestino":"999","endToEndId":"E99900000202608141300000000001","pagadorNome":"Cliente Ficticio"}\n' | docker exec -i e02-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9094 --topic pagamentos.pix.realizado.v1 --property parse.headers=true --property headers.delimiter='#' --property headers.separator=';' --property headers.key.separator='=' --property parse.key=true --property key.separator='~'
+printf 'ce_specversion=1.0;ce_id=evt-001;ce_source=/pagamentos/servico-pix;ce_type=pagamentos.pix.realizado.v1;ce_time=2026-08-14T13:00:00.000Z#cli-0001~{"eventoId":"evt-001","liquidadoEm":"2026-08-14T13:00:00.000Z","idTransacaoPix":"pix-001","idEmpresa":"cli-0001","valor":150.00,"chavePix":"fulano@exemplo.com","tipoChave":"EMAIL","bancoDestino":"999","endToEndId":"E99900000202608141300000000001","pagadorNome":"Cliente Ficticio"}\n' | docker exec -i e02-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9094 --topic pagamentos.pix.realizado.v1 --property parse.headers=true --property headers.delimiter='#' --property headers.separator=';' --property headers.key.separator='=' --property parse.key=true --property key.separator='~'
 ```
 
 Repetir a mesma linha três vezes demonstra a idempotência: o `ce_id` é o mesmo e o efeito
-acontece uma vez só. Para gastar a franquia, troque `ce_id`, `eventoId` e `pixId` a cada
+acontece uma vez só. Para gastar a franquia, troque `ce_id`, `eventoId` e `idTransacaoPix` a cada
 publicação.
 
 ## Passo 5 — conferir o resultado
@@ -125,19 +125,19 @@ publicação.
 do valor (abaixo de R$ 500 → R$ 0,50):
 
 ```bash
-docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT pix_id, competencia, situacao, valor FROM tarifa ORDER BY ocorrido_em;"
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT id_transacao_pix, competencia, situacao, valor FROM tarifa ORDER BY liquidado_em;"
 ```
 
 ```
-  pix_id    | competencia |   situacao   | valor
-------------+-------------+--------------+-------
- pix-e2e-1  | 2026-08     | FRANQUIA     |  0.00
+ id_transacao_pix | competencia |  situacao  | valor
+------------------+-------------+------------+-------
+ pix-e2e-1        | 2026-08     | FRANQUIA   |  0.00
  ...
- pix-e2e-11 | 2026-08     | FAIXA        |  0.50   <- o 11º excede a franquia
+ pix-e2e-11       | 2026-08     | FAIXA      |  0.50   <- o 11º excede a franquia
 ```
 
 A coluna `situacao` é o motivo da decisão, e é dado de domínio: três das cinco saídas valem zero e
-significam coisas diferentes. Trocando o `clienteId` para `cli-9999` — que não tem contrato — a
+significam coisas diferentes. Trocando o `idEmpresa` para `cli-9999` — que não tem contrato — a
 linha sai como `SEM_CONTRATO`, e **não** cobrada:
 
 ```bash
@@ -151,7 +151,7 @@ docker exec e02-kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server
 ```
 
 **Na Kafka UI** (http://localhost:8081) — abra uma mensagem do tópico e confira os cinco
-cabeçalhos `ce_*` e que `ocorridoEm` está em ISO-8601, não em epoch.
+cabeçalhos `ce_*` e que `liquidadoEm` está em ISO-8601, não em epoch.
 
 > No Git Bash, os `docker exec` acima precisam do prefixo `MSYS_NO_PATHCONV=1`, senão o caminho
 > `/opt/kafka/...` é convertido para caminho do Windows e o exec falha.
@@ -166,8 +166,8 @@ mvn -f servico-tarifacao/pom.xml test
 
 Catorze cenários, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
 3x produz efeito 1x** · consumidor tolerante a campos desconhecidos · `ce_id` ausente · mesmo
-`pixId` com `eventoId` distintos · isenção por franquia · a faixa de valor, com a fronteira
-exclusiva · cliente sem contrato não é cobrado · contrato encerrado · troca de plano respeitando a
+`idTransacaoPix` com `eventoId` distintos · isenção por franquia · a faixa de valor, com a fronteira
+exclusiva · empresa sem contrato não é cobrada · contrato encerrado · troca de plano respeitando a
 competência do evento · o estouro do teto cobrado parcialmente · só o isento consome franquia ·
 isolamento por competência. A tabela completa está em
 [servico-tarifacao/README.md](servico-tarifacao/README.md#rodar).

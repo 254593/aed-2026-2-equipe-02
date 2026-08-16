@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * O contrato comercial vigente do cliente numa competencia: quantos Pix ele tem
+ * O contrato comercial vigente da empresa numa competencia: quantos Pix ele tem
  * isentos no mes, quanto custa cada faixa de valor acima disso, e qual o teto
  * de gasto mensal, se houver.
  *
@@ -26,7 +26,7 @@ import java.util.Objects;
  */
 public final class OfertaVO {
 
-    private final String clienteId;
+    private final String idEmpresa;
     private final String vigenciaInicio;
     private final int pixGratuitosMes;
 
@@ -35,13 +35,13 @@ public final class OfertaVO {
 
     private final List<FaixaDeTarifaVO> faixas;
 
-    public OfertaVO(String clienteId,
+    public OfertaVO(String idEmpresa,
                     String vigenciaInicio,
                     int pixGratuitosMes,
                     BigDecimal tetoMensal,
                     List<FaixaDeTarifaVO> faixas) {
 
-        this.clienteId = Objects.requireNonNull(clienteId, "clienteId e obrigatorio");
+        this.idEmpresa = Objects.requireNonNull(idEmpresa, "idEmpresa e obrigatorio");
         this.vigenciaInicio = Objects.requireNonNull(vigenciaInicio, "vigenciaInicio e obrigatoria");
         this.pixGratuitosMes = pixGratuitosMes;
         this.tetoMensal = tetoMensal;
@@ -59,7 +59,7 @@ public final class OfertaVO {
      * Percorre as faixas na ordem cadastrada e devolve a primeira que cobre o
      * valor. Oferta sem faixa nenhuma e contrato mal cadastrado, nao contrato
      * gratuito: deixar passar como zero esconderia o erro de cadastro dentro do
-     * extrato do cliente, onde ninguem procuraria por ele.
+     * extrato da empresa, onde ninguem procuraria por ele.
      */
     public BigDecimal tarifaPara(BigDecimal valorDoPix) {
         for (FaixaDeTarifaVO faixa : faixas) {
@@ -68,7 +68,7 @@ public final class OfertaVO {
             }
         }
         throw new IllegalStateException(
-                "oferta de " + clienteId + " vigente desde " + vigenciaInicio
+                "oferta de " + idEmpresa + " vigente desde " + vigenciaInicio
                         + " nao tem faixa que cubra um Pix de " + valorDoPix);
     }
 
@@ -76,8 +76,8 @@ public final class OfertaVO {
         return tetoMensal != null;
     }
 
-    public String getClienteId() {
-        return clienteId;
+    public String getIdEmpresa() {
+        return idEmpresa;
     }
 
     public String getVigenciaInicio() {
@@ -98,7 +98,7 @@ public final class OfertaVO {
 
     @Override
     public String toString() {
-        return "OfertaVO{clienteId=" + clienteId
+        return "OfertaVO{idEmpresa=" + idEmpresa
                 + ", vigenciaInicio=" + vigenciaInicio
                 + ", pixGratuitosMes=" + pixGratuitosMes
                 + ", tetoMensal=" + tetoMensal

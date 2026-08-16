@@ -43,12 +43,12 @@ class PixControllerTest {
         PixController controller = new PixController(pixService);
 
         ResponseEntity<?> resposta = controller.tratarEntradaInvalida(
-                new IllegalArgumentException("pixId e obrigatorio"));
+                new IllegalArgumentException("idTransacaoPix e obrigatorio"));
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(400);
         @SuppressWarnings("unchecked")
         java.util.Map<String, String> corpo = (java.util.Map<String, String>) resposta.getBody();
         assertThat(corpo).containsKey("erro");
-        assertThat(corpo.get("erro")).isEqualTo("pixId e obrigatorio");
+        assertThat(corpo.get("erro")).isEqualTo("idTransacaoPix e obrigatorio");
     }
 }

@@ -1,7 +1,7 @@
 # servico-pix - o publicador
 
 Recebe pela API o registro de um Pix realizado e publica `PixRealizadoEvent` para que o
-`servico-tarifacao` aplique a franquia mensal do cliente.
+`servico-tarifacao` aplique a franquia mensal da empresa.
 
 ## Rodar
 
@@ -39,11 +39,11 @@ A API responde `202 Accepted`. Consulte a mensagem na Kafka UI em
 ## Contrato publicado
 
 - tópico e `ce_type`: `pagamentos.pix.realizado.v1`;
-- chave de partição: `clienteId`;
+- chave de partição: `idEmpresa`;
 - três partições, declaradas pelo bean `NewTopic`;
 - `ce_source`: `/pagamentos/servico-pix`;
 - `ce_id`: igual ao `eventoId` do corpo;
-- `ce_time` e `ocorridoEm`: ISO-8601.
+- `ce_time` e `liquidadoEm`: ISO-8601.
 
 O retorno de `KafkaTemplate.send()` pertence a `ResultadoPublicacaoListener`, que registra
 sucesso ou falha de publicação. O serviço não possui banco nesta etapa.
