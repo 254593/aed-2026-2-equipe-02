@@ -107,6 +107,38 @@ chamada, então cada requisição é um fato novo.
 
 A resposta é **202 Accepted**, não 200: no instante da resposta o Pix ainda não foi tarifado.
 
+### Ou pelo script, que já traz o roteiro pronto
+
+```bash
+./scripts/publicar-pix.sh --roteiro
+```
+
+```powershell
+.\scripts\publicar-pix.ps1 -Roteiro
+```
+
+Os dois são equivalentes — mesmos parâmetros, mesma saída. O `--roteiro` publica os cinco
+cenários da política em sequência e termina pela **idempotência**: franquia, faixa por valor,
+a fronteira exclusiva em R$ 500,00, o teto parando exatamente em R$ 25,00, a empresa sem
+contrato saindo com valor zero, e o mesmo evento entregue 3× produzindo efeito 1×.
+
+| Comando | O que faz |
+|---|---|
+| `--roteiro` / `-Roteiro` | os cinco cenários da política **+ a idempotência** |
+| `--idempotencia` / `-Idempotencia` | **o mesmo evento 3× → efeito 1×**, e falha se não for |
+| `--evento-id X` / `-EventoId X` | repete um `eventoId` de propósito, para ver o descarte |
+| `--entregas 5` / `-Entregas 5` | quantas vezes reentregar o mesmo evento |
+| `--conferir` / `-Conferir` | só mostra a tabela `tarifa`, sem publicar nada |
+| `-e emp-0002 -v 750.00` | um Pix parametrizado (`-Empresa` / `-Valor` no PowerShell) |
+| `-n 11` | onze Pix seguidos (`-Quantidade` no PowerShell) |
+| `-h` | ajuda |
+
+> **Por que a idempotência não passa pela API HTTP.** O corpo do `POST` é um `RealizacaoPixVO` —
+> o *pedido* —, e quem cria o *fato* (sorteando o `eventoId`) é o `PixService`. Cada chamada é um
+> fato novo, então repetir o `curl` **não** demonstra reentrega. O `--idempotencia` publica direto
+> no tópico com `ce_id` fixo, que é o que o consumidor usa para deduplicar. As duas cargas estão
+> em [scripts/eventos/](scripts/eventos/), com a explicação da diferença.
+
 ### Alternativa sem o publicador
 
 Dá para exercitar o consumidor sozinho, publicando direto no tópico:
@@ -194,6 +226,7 @@ aed-2026-2-equipe-02/
 │   ├── regra-de-tarifacao.md    a regra em detalhe: faixas, teto, compensação
 │   ├── IA.md                    registro do uso de IA, por integrante
 │   └── entregas/aula-02.md      folha de rosto desta entrega
+├── scripts/                     publicar-pix.sh e .ps1 — exercitam a API
 ├── servico-pix/                 publicador  (projeto Maven independente)
 └── servico-tarifacao/           consumidor  (projeto Maven independente)
 ```
