@@ -11,7 +11,7 @@ recusa é indício de que a ferramenta decidiu no lugar da equipe.
 
 ## Aula 02
 
-### Allainn Christiam (1664926) — consumidor de tarifação, infraestrutura e teste
+### Allainn Christiam (254337) — consumidor de tarifação, infraestrutura e teste
 
 Ferramenta: Claude Code (Claude Opus). Interações de 14 e 15/08/2026.
 
