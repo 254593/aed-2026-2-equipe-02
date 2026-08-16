@@ -73,10 +73,16 @@ Pix de R$ 6.000,00 → faixa = R$ 10,00
 Sem esse passo o mês fecharia em R$ 2.005,00, acima do teto contratado. É o que sustenta a
 invariante `valorTarifadoNaCompetencia ≤ teto`.
 
-A alternativa — não cobrar nada quando não cabe — exigiria um sinalizador de "teto atingido"
-separado do acumulador, que precisaria ser ressincronizado a cada estorno. Com a cobrança parcial,
-"teto atingido" é derivável do próprio acumulado, e o estado se recompõe sozinho quando uma
-compensação devolve espaço.
+A alternativa — não cobrar nada quando não cabe — deixaria o acumulado abaixo do teto para sempre,
+e um Pix barato posterior voltaria a ser cobrado; honrar "depois do teto, nada é cobrado" exigiria
+um sinalizador separado do acumulador. Com a cobrança parcial, "teto atingido" é derivável do
+próprio acumulado, sem nenhum estado à parte.
+
+**O acumulado é monotônico: o teto não reabre.** Estorno é ajuste de fatura, em acumulador
+próprio, e nunca decrementa o que já foi cobrado. É por isso que a coluna `valor` tem
+`CHECK (valor >= 0)` no `schema.sql`: uma única linha negativa faria o `SUM` decrementar e o teto
+reabrir em silêncio, recobrando Pix que já haviam saído como `TETO_ATINGIDO`. O teste 16 protege
+essa constraint.
 
 ### Por que o motivo é uma coluna, e não só o valor
 
@@ -376,7 +382,7 @@ virada do mês cairia em competências diferentes conforme onde o consumidor rod
 
 ```bash
 mvn spring-boot:run     # precisa do docker compose up -d na raiz
-mvn test                # 15 testes, sem Docker e sem o servico-pix
+mvn test                # 16 testes, sem Docker e sem o servico-pix
 ```
 
 O teste publica **JSON cru** no tópico, não objeto Java — assim ele exercita o contrato do fio,
@@ -404,6 +410,7 @@ justamente o bug que os testes 8 e 9 existem para pegar.
 | 13 | **o estouro do teto é cobrado parcialmente** — o acumulado para exatamente no teto |
 | 14 | só o Pix isento consome franquia; o tarifado não |
 | 15 | a competência é isolada por mês: a franquia reinicia em setembro |
+| 16 | **o banco recusa valor negativo em `tarifa`** — o teto não reabre em silêncio |
 
 ## Configuração relevante
 

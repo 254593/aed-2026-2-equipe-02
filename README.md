@@ -18,12 +18,21 @@ Equipe 02 · líder: **Evandro V. Junior**
 | _(a preencher)_ | | |
 
 <!--
-RASCUNHO — três coisas para a equipe conferir antes da tag:
-  1. faltam os três integrantes restantes (a turma organiza equipes de sete);
-  2. líder inferido de quem criou o repositório; confirmar;
-  3. a matrícula do Evandro veio do e-mail dos commits (1050413), mas a conta do
-     GitHub é 254593. O enunciado (secao 2.2) exige NOME DE USUARIO = MATRICULA,
-     e o checklist item 17 confere isso na aba Contributors. Vale alinhar as duas.
+PENDENTE — para a equipe conferir antes da entrega:
+  1. faltam os tres integrantes restantes (a turma organiza equipes de sete),
+     e nenhum deles tem commit proprio ainda — item 17 do checklist;
+  2. lider inferido de quem criou o repositorio; confirmar;
+  3. contas do GitHub x matricula (secao 2.2 exige NOME DE USUARIO = MATRICULA):
+       254337  Allainn      OK  (conta renomeada em 16/08)
+       254593  Evandro      OK
+       1665626 Amanda       conferir se e a matricula
+       1125713 Alexsander   DIVERGE: o README diz 254779, e as duas contas
+                            existem. Os commits dele saem como 1125713. A saida
+                            e adicionar 1125713@pucminas.edu.br em Settings ->
+                            Emails da conta 254779: os commits migram sozinhos,
+                            porque a atribuicao do GitHub e pelo e-mail;
+  4. docs/IA.md ainda tem uma secao so. Sao 10% da nota, e o criterio pede tres
+     interacoes com ao menos uma recusa justificada POR INTEGRANTE.
 -->
 
 ## O domínio em uma frase
@@ -107,6 +116,38 @@ chamada, então cada requisição é um fato novo.
 
 A resposta é **202 Accepted**, não 200: no instante da resposta o Pix ainda não foi tarifado.
 
+### Ou pelo script, que já traz o roteiro pronto
+
+```bash
+./scripts/publicar-pix.sh --roteiro
+```
+
+```powershell
+.\scripts\publicar-pix.ps1 -Roteiro
+```
+
+Os dois são equivalentes — mesmos parâmetros, mesma saída. O `--roteiro` publica os cinco
+cenários da política em sequência e termina pela **idempotência**: franquia, faixa por valor,
+a fronteira exclusiva em R$ 500,00, o teto parando exatamente em R$ 25,00, a empresa sem
+contrato saindo com valor zero, e o mesmo evento entregue 3× produzindo efeito 1×.
+
+| Comando | O que faz |
+|---|---|
+| `--roteiro` / `-Roteiro` | os cinco cenários da política **+ a idempotência** |
+| `--idempotencia` / `-Idempotencia` | **o mesmo evento 3× → efeito 1×**, e falha se não for |
+| `--evento-id X` / `-EventoId X` | repete um `eventoId` de propósito, para ver o descarte |
+| `--entregas 5` / `-Entregas 5` | quantas vezes reentregar o mesmo evento |
+| `--conferir` / `-Conferir` | só mostra a tabela `tarifa`, sem publicar nada |
+| `-e emp-0002 -v 750.00` | um Pix parametrizado (`-Empresa` / `-Valor` no PowerShell) |
+| `-n 11` | onze Pix seguidos (`-Quantidade` no PowerShell) |
+| `-h` | ajuda |
+
+> **Por que a idempotência não passa pela API HTTP.** O corpo do `POST` é um `RealizacaoPixVO` —
+> o *pedido* —, e quem cria o *fato* (sorteando o `eventoId`) é o `PixService`. Cada chamada é um
+> fato novo, então repetir o `curl` **não** demonstra reentrega. O `--idempotencia` publica direto
+> no tópico com `ce_id` fixo, que é o que o consumidor usa para deduplicar. As duas cargas estão
+> em [scripts/eventos/](scripts/eventos/), com a explicação da diferença.
+
 ### Alternativa sem o publicador
 
 Dá para exercitar o consumidor sozinho, publicando direto no tópico:
@@ -164,7 +205,7 @@ Roda com Kafka embutido e H2 — **sem Docker e sem o `servico-pix`**:
 mvn -f servico-tarifacao/pom.xml test
 ```
 
-Quinze cenários, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
+Dezesseis cenários, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
 3x produz efeito 1x** · consumidor tolerante a campos desconhecidos · `ce_id` ausente · mesmo
 `idTransacaoPix` com `eventoId` distintos · isenção por franquia · a faixa de valor, com a fronteira
 exclusiva · empresa sem contrato não é cobrada · contrato encerrado · troca de plano respeitando a
@@ -194,6 +235,7 @@ aed-2026-2-equipe-02/
 │   ├── regra-de-tarifacao.md    a regra em detalhe: faixas, teto, compensação
 │   ├── IA.md                    registro do uso de IA, por integrante
 │   └── entregas/aula-02.md      folha de rosto desta entrega
+├── scripts/                     publicar-pix.sh e .ps1 — exercitam a API
 ├── servico-pix/                 publicador  (projeto Maven independente)
 └── servico-tarifacao/           consumidor  (projeto Maven independente)
 ```

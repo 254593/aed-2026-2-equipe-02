@@ -88,15 +88,29 @@ CREATE TABLE IF NOT EXISTS oferta_faixa (
 -- impede o efeito duplicado e a tabela evento_processado, dentro da mesma
 -- transacao. Se um dia a deduplicacao falhar, o banco recusa a insercao em vez
 -- de cobrar de novo.
+--
+-- O CHECK (valor >= 0) NAO E ZELO GENERICO: e a invariante do teto, tornada
+-- executavel. O teto mensal e derivado por SUM(valor) sobre esta tabela, e o
+-- acumulado precisa ser MONOTONICO — so cresce. Uma unica linha negativa
+-- gravada aqui, por exemplo tentando registrar um estorno como o inverso da
+-- cobranca, faria o SUM decrementar e o teto REABRIR EM SILENCIO: Pix que ja
+-- tinham saido como TETO_ATINGIDO voltariam a ser cobrados, e decisoes ja
+-- tomadas ficariam inconsistentes entre si.
+--
+-- Estorno e ajuste de FATURA, com acumulador proprio
+-- (valorEstornadoNaCompetencia), e nunca reversao de uma decisao ja tomada. Ver
+-- docs/regra-de-tarifacao.md, secao Compensacao, e o ADR-002: "nada e apagado
+-- nem decrementado". Sem este CHECK, a regra depende de alguem ler o javadoc
+-- antes de escrever a saga da aula 05; com ele, o banco recusa.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS tarifa (
-  evento_id   VARCHAR(64)   PRIMARY KEY,
-  id_empresa  VARCHAR(32)   NOT NULL,
-  id_transacao_pix      VARCHAR(64)   NOT NULL,
-  competencia VARCHAR(7)    NOT NULL,   -- YYYY-MM, derivada do liquidadoEm do evento
-  situacao    VARCHAR(20)   NOT NULL,   -- SEM_CONTRATO|FRANQUIA|FAIXA|TETO_PARCIAL|TETO_ATINGIDO
-  valor       NUMERIC(10,2) NOT NULL,
-  liquidado_em TIMESTAMP     NOT NULL
+  evento_id        VARCHAR(64)   PRIMARY KEY,
+  id_empresa       VARCHAR(32)   NOT NULL,
+  id_transacao_pix VARCHAR(64)   NOT NULL,
+  competencia      VARCHAR(7)    NOT NULL,  -- YYYY-MM, do liquidadoEm do evento
+  situacao         VARCHAR(20)   NOT NULL,  -- SEM_CONTRATO|FRANQUIA|FAIXA|TETO_PARCIAL|TETO_ATINGIDO
+  valor            NUMERIC(10,2) NOT NULL CHECK (valor >= 0),
+  liquidado_em     TIMESTAMP     NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_tarifa_empresa_competencia ON tarifa (id_empresa, competencia);
