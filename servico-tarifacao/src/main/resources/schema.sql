@@ -52,17 +52,23 @@ CREATE TABLE IF NOT EXISTS oferta (
 -- As faixas de tarifa de uma oferta: o Pix acima da franquia custa conforme o
 -- VALOR transferido, nao um preco unico.
 --
--- valor_ate e o limite superior INCLUSIVO da faixa. A ultima faixa tem
--- valor_ate nulo, que significa "daqui para cima". A coluna `ordem` existe para
--- dar chave primaria e leitura deterministica; a regra de escolha da faixa mora
--- no OfertaVO, em Java, e nao numa clausula SQL — decisao de dominio fica onde
--- se possa ler e testar.
+-- valor_abaixo_de e o limite superior EXCLUSIVO da faixa — a especificacao
+-- define "limite inferior inclusivo, superior exclusivo". A coluna nao se chama
+-- valor_ate porque "ate" se le como inclusivo, e foi assim que a primeira
+-- versao desta tabela errou: um Pix de exatamente R$ 500,00 caia na faixa de
+-- baixo e pagava a tarifa errada.
+--
+-- O limite inferior nao e armazenado: e o superior da faixa anterior. A ultima
+-- faixa tem valor_abaixo_de nulo, que significa "daqui para cima". A coluna
+-- `ordem` da a chave primaria e a leitura deterministica; a regra de escolha da
+-- faixa mora no OfertaVO, em Java, e nao numa clausula SQL — decisao de dominio
+-- fica onde se possa ler e testar.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS oferta_faixa (
   cliente_id      VARCHAR(32)   NOT NULL,
   vigencia_inicio VARCHAR(7)    NOT NULL,
   ordem           INT           NOT NULL,
-  valor_ate       NUMERIC(15,2),              -- NULL = ultima faixa, sem limite
+  valor_abaixo_de NUMERIC(15,2),              -- EXCLUSIVO; NULL = ultima faixa
   valor_tarifa    NUMERIC(10,2) NOT NULL,
   PRIMARY KEY (cliente_id, vigencia_inicio, ordem)
 );
@@ -88,7 +94,7 @@ CREATE TABLE IF NOT EXISTS tarifa (
   cliente_id  VARCHAR(32)   NOT NULL,
   pix_id      VARCHAR(64)   NOT NULL,
   competencia VARCHAR(7)    NOT NULL,   -- YYYY-MM, derivada do ocorridoEm do evento
-  situacao    VARCHAR(20)   NOT NULL,   -- SEM_CONTRATO | ISENTO_FRANQUIA | TARIFADO | TETO_ATINGIDO
+  situacao    VARCHAR(20)   NOT NULL,   -- SEM_CONTRATO|FRANQUIA|FAIXA|TETO_PARCIAL|TETO_ATINGIDO
   valor       NUMERIC(10,2) NOT NULL,
   ocorrido_em TIMESTAMP     NOT NULL
 );
@@ -103,26 +109,38 @@ CREATE INDEX IF NOT EXISTS idx_tarifa_cliente_competencia ON tarifa (cliente_id,
 -- (CDC, art. 42, paragrafo unico). Ver ADR-002, secao Decisao.
 -- ---------------------------------------------------------------------------
 
--- cli-0001  plano com 5 isencoes e tres faixas de valor, sem teto
+-- cli-0001  PLANO PJ, exatamente como a especificacao da regra o define:
+--           10 isencoes por competencia, teto de R$ 2.000,00 e a tabela de
+--           quatro faixas. Repare nos limites: EXCLUSIVOS. Um Pix de
+--           R$ 500,00 nao cai na primeira faixa, e sim na segunda.
 INSERT INTO oferta (cliente_id, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
-     VALUES ('cli-0001', '2026-01', NULL, 5, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_tarifa)
-     VALUES ('cli-0001', '2026-01', 1, 500.00, 1.90) ON CONFLICT DO NOTHING;
-INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_tarifa)
-     VALUES ('cli-0001', '2026-01', 2, 5000.00, 3.50) ON CONFLICT DO NOTHING;
-INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_tarifa)
-     VALUES ('cli-0001', '2026-01', 3, NULL, 7.00) ON CONFLICT DO NOTHING;
+     VALUES ('cli-0001', '2026-01', NULL, 10, 2000.00) ON CONFLICT DO NOTHING;
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
+     VALUES ('cli-0001', '2026-01', 1,  500.00,  0.50) ON CONFLICT DO NOTHING;
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
+     VALUES ('cli-0001', '2026-01', 2, 1000.00,  1.00) ON CONFLICT DO NOTHING;
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
+     VALUES ('cli-0001', '2026-01', 3, 5000.00,  5.00) ON CONFLICT DO NOTHING;
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
+     VALUES ('cli-0001', '2026-01', 4, NULL,    10.00) ON CONFLICT DO NOTHING;
 
--- cli-0002  plano enxuto: 2 isencoes, faixa unica
+-- cli-0002  franquia curta (2), para exercitar o fim da franquia sem publicar
+--           onze eventos. Mesma tabela de faixas do Plano PJ, sem teto.
 INSERT INTO oferta (cliente_id, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
      VALUES ('cli-0002', '2026-01', NULL, 2, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_tarifa)
-     VALUES ('cli-0002', '2026-01', 1, NULL, 3.50) ON CONFLICT DO NOTHING;
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
+     VALUES ('cli-0002', '2026-01', 1,  500.00,  0.50) ON CONFLICT DO NOTHING;
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
+     VALUES ('cli-0002', '2026-01', 2, 1000.00,  1.00) ON CONFLICT DO NOTHING;
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
+     VALUES ('cli-0002', '2026-01', 3, 5000.00,  5.00) ON CONFLICT DO NOTHING;
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
+     VALUES ('cli-0002', '2026-01', 4, NULL,    10.00) ON CONFLICT DO NOTHING;
 
 -- cli-0003  sem isencao: tarifa desde o primeiro Pix
 INSERT INTO oferta (cliente_id, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
      VALUES ('cli-0003', '2026-01', NULL, 0, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_tarifa)
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
      VALUES ('cli-0003', '2026-01', 1, NULL, 0.99) ON CONFLICT DO NOTHING;
 
 -- cli-0004  TROCA DE PLANO: 2 isencoes ate 2026-07, 10 isencoes a partir de 2026-08.
@@ -130,24 +148,29 @@ INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_t
 --           competencia, e nao a vigente hoje.
 INSERT INTO oferta (cliente_id, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
      VALUES ('cli-0004', '2026-01', '2026-07', 2, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_tarifa)
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
      VALUES ('cli-0004', '2026-01', 1, NULL, 4.90) ON CONFLICT DO NOTHING;
 INSERT INTO oferta (cliente_id, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
      VALUES ('cli-0004', '2026-08', NULL, 10, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_tarifa)
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
      VALUES ('cli-0004', '2026-08', 1, NULL, 2.50) ON CONFLICT DO NOTHING;
 
 -- cli-0005  CONTRATO ENCERRADO em 2026-07 e sem sucessora: em 2026-08 nao ha
 --           oferta vigente, e o Pix sai SEM_CONTRATO, valor 0.00.
 INSERT INTO oferta (cliente_id, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
      VALUES ('cli-0005', '2026-01', '2026-07', 5, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_tarifa)
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
      VALUES ('cli-0005', '2026-01', 1, NULL, 1.90) ON CONFLICT DO NOTHING;
 
--- cli-0006  TETO MENSAL de R$ 1,98: sem isencao, a R$ 0,99 o Pix. Os dois
---           primeiros sao cobrados e atingem o teto; do terceiro em diante o
---           Pix sai 0.00 como TETO_ATINGIDO.
+-- cli-0006  TETO BAIXO (R$ 25,00), sem isencao, a R$ 10,00 o Pix. Existe para
+--           exercitar as DUAS saidas do teto sem publicar 200 eventos:
+--             Pix 1  ->  0 + 10 cabe   -> FAIXA         10,00   (acumulado 10)
+--             Pix 2  -> 10 + 10 cabe   -> FAIXA         10,00   (acumulado 20)
+--             Pix 3  -> 20 + 10 estoura-> TETO_PARCIAL   5,00   (acumulado 25)
+--             Pix 4  -> 25 >= 25       -> TETO_ATINGIDO  0,00   (acumulado 25)
+--           O acumulado para exatamente no teto: e a invariante
+--           valor_tarifado_na_competencia <= teto, que so o parcial garante.
 INSERT INTO oferta (cliente_id, vigencia_inicio, vigencia_fim, pix_gratuitos_mes, teto_mensal)
-     VALUES ('cli-0006', '2026-01', NULL, 0, 1.98) ON CONFLICT DO NOTHING;
-INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_ate, valor_tarifa)
-     VALUES ('cli-0006', '2026-01', 1, NULL, 0.99) ON CONFLICT DO NOTHING;
+     VALUES ('cli-0006', '2026-01', NULL, 0, 25.00) ON CONFLICT DO NOTHING;
+INSERT INTO oferta_faixa (cliente_id, vigencia_inicio, ordem, valor_abaixo_de, valor_tarifa)
+     VALUES ('cli-0006', '2026-01', 1, NULL, 10.00) ON CONFLICT DO NOTHING;

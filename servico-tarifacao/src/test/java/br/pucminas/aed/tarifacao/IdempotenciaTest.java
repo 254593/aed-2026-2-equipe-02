@@ -28,8 +28,8 @@ import br.pucminas.aed.tarifacao.domain.SituacaoDaTarifaVO;
 import br.pucminas.aed.tarifacao.service.TarifacaoRepository;
 
 /**
- * Prova automatizada da idempotencia do consumidor e das quatro saidas da
- * politica de tarifacao do ADR-002.
+ * Prova automatizada da idempotencia do consumidor e das cinco saidas da
+ * politica de tarifacao.
  *
  * Roda com Kafka embutido e H2: SEM Docker e SEM o servico-pix. Testar o
  * consumidor sem subir o produtor e justamente o que a separacao em duas
@@ -41,8 +41,8 @@ import br.pucminas.aed.tarifacao.service.TarifacaoRepository;
  *
  * NENHUM Instant.now() EM LUGAR NENHUM. Cada evento carrega um ocorridoEm fixo,
  * e e dele que sai a competencia. Um teste que dependesse do relogio passaria a
- * falhar na virada de mes — e, pior, esconderia justamente o bug que os testes
- * 10 e 11 existem para pegar.
+ * falhar na virada de mes e, pior, esconderia justamente o bug que os testes 8
+ * e 9 existem para pegar.
  */
 @SpringBootTest
 @EmbeddedKafka(partitions = 3, topics = "pagamentos.pix.realizado.v1")
@@ -71,15 +71,15 @@ class IdempotenciaTest {
     private static final String OCORRIDO_EM_JULHO = "2026-07-15T10:00:00.000Z";
     private static final String COMPETENCIA_JULHO = "2026-07";
 
-    /** Valor padrao do Pix nos testes que nao estao exercitando faixa. */
+    /** Cai na primeira faixa do Plano PJ (abaixo de R$ 500) — tarifa R$ 0,50. */
     private static final String VALOR_PADRAO = "250.00";
 
-    private static final String CLIENTE_FRANQUIA_5 = "cli-0001";  // 5 gratis, faixas 1,90/3,50/7,00
-    private static final String CLIENTE_FRANQUIA_2 = "cli-0002";  // 2 gratis, faixa unica 3,50
-    private static final String CLIENTE_FRANQUIA_0 = "cli-0003";  // 0 gratis, faixa unica 0,99
-    private static final String CLIENTE_TROCA_PLANO = "cli-0004"; // 2 gratis ate 07; 10 a partir de 08
+    private static final String CLIENTE_PLANO_PJ = "cli-0001";  // 10 isentos, teto 2.000
+    private static final String CLIENTE_FRANQUIA_2 = "cli-0002"; // 2 isentos, faixas do Plano PJ
+    private static final String CLIENTE_FRANQUIA_0 = "cli-0003"; // 0 isentos, faixa unica 0,99
+    private static final String CLIENTE_TROCA_PLANO = "cli-0004"; // 2/R$4,90 ate 07; 10/R$2,50 de 08
     private static final String CLIENTE_CONTRATO_ENCERRADO = "cli-0005"; // vigencia so ate 2026-07
-    private static final String CLIENTE_COM_TETO = "cli-0006";    // 0 gratis, 0,99, teto 1,98
+    private static final String CLIENTE_COM_TETO = "cli-0006";   // 0 isentos, R$10,00, teto R$25,00
 
     /** Cliente sem linha nenhuma em `oferta`: nunca teve contrato. */
     private static final String CLIENTE_SEM_CONTRATO = "cli-9999";
@@ -115,12 +115,12 @@ class IdempotenciaTest {
     @Test
     @DisplayName("1 - Pix dentro da franquia e registrado como isento")
     void pixDentroDaFranquiaSaiIsento() {
-        publicar(UUID.randomUUID().toString(), "pix-001", CLIENTE_FRANQUIA_5);
+        publicar(UUID.randomUUID().toString(), "pix-001", CLIENTE_PLANO_PJ);
 
-        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_5, 1);
-        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_5, COMPETENCIA))
+        aguardarQuantidadeDeTarifas(CLIENTE_PLANO_PJ, 1);
+        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_PLANO_PJ, COMPETENCIA))
                 .isEqualByComparingTo("0.00");
-        assertThat(situacoes(CLIENTE_FRANQUIA_5, COMPETENCIA, SituacaoDaTarifaVO.ISENTO_FRANQUIA))
+        assertThat(situacoes(CLIENTE_PLANO_PJ, COMPETENCIA, SituacaoDaTarifaVO.FRANQUIA))
                 .isEqualTo(1L);
     }
 
@@ -147,8 +147,9 @@ class IdempotenciaTest {
         publicar(UUID.randomUUID().toString(), "pix-103", CLIENTE_FRANQUIA_2);
 
         aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 3);
+        // dois isentos e um a R$ 0,50 — o Pix de R$ 250 cai na primeira faixa
         assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_2, COMPETENCIA))
-                .isEqualByComparingTo("3.50");
+                .isEqualByComparingTo("0.50");
     }
 
     @Test
@@ -169,13 +170,13 @@ class IdempotenciaTest {
     @DisplayName("5 - mensagem sem ce_id usa o eventoId do corpo e continua idempotente")
     void ceIdAusenteUsaFallbackDoCorpo() {
         String eventoId = UUID.randomUUID().toString();
-        String json = montarJson(eventoId, "pix-301", CLIENTE_FRANQUIA_5, OCORRIDO_EM, VALOR_PADRAO);
+        String json = montarJson(eventoId, "pix-301", CLIENTE_PLANO_PJ, OCORRIDO_EM, VALOR_PADRAO);
 
-        enviarSemCeId(json, CLIENTE_FRANQUIA_5);
-        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_5, 1);
+        enviarSemCeId(json, CLIENTE_PLANO_PJ);
+        aguardarQuantidadeDeTarifas(CLIENTE_PLANO_PJ, 1);
 
-        enviarSemCeId(json, CLIENTE_FRANQUIA_5); // reentrega, mesmo eventoId no corpo
-        confirmarQueNaoMuda(CLIENTE_FRANQUIA_5, 1);
+        enviarSemCeId(json, CLIENTE_PLANO_PJ); // reentrega, mesmo eventoId no corpo
+        confirmarQueNaoMuda(CLIENTE_PLANO_PJ, 1);
         assertThat(repositorio.contarEventosProcessados()).isEqualTo(1L);
     }
 
@@ -188,15 +189,15 @@ class IdempotenciaTest {
         // nomeado na secao 9 do enunciado.
         String pixIdCompartilhado = "pix-601";
 
-        publicar(UUID.randomUUID().toString(), pixIdCompartilhado, CLIENTE_FRANQUIA_5);
-        publicar(UUID.randomUUID().toString(), pixIdCompartilhado, CLIENTE_FRANQUIA_5);
+        publicar(UUID.randomUUID().toString(), pixIdCompartilhado, CLIENTE_PLANO_PJ);
+        publicar(UUID.randomUUID().toString(), pixIdCompartilhado, CLIENTE_PLANO_PJ);
 
-        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_5, 2);
+        aguardarQuantidadeDeTarifas(CLIENTE_PLANO_PJ, 2);
         assertThat(repositorio.contarEventosProcessados()).isEqualTo(2L);
     }
 
     // ------------------------------------------------------------------
-    // as quatro saidas da politica — ADR-002, secao Decisao
+    // vigencia da oferta — ADR-002
     // ------------------------------------------------------------------
 
     @Test
@@ -229,7 +230,7 @@ class IdempotenciaTest {
                 OCORRIDO_EM_JULHO, VALOR_PADRAO);
         aguardarQuantidadeDeTarifas(CLIENTE_CONTRATO_ENCERRADO, 1, COMPETENCIA_JULHO);
         assertThat(situacoes(CLIENTE_CONTRATO_ENCERRADO, COMPETENCIA_JULHO,
-                SituacaoDaTarifaVO.ISENTO_FRANQUIA)).isEqualTo(1L);
+                SituacaoDaTarifaVO.FRANQUIA)).isEqualTo(1L);
 
         publicar(UUID.randomUUID().toString(), "pix-802", CLIENTE_CONTRATO_ENCERRADO);
         aguardarQuantidadeDeTarifas(CLIENTE_CONTRATO_ENCERRADO, 1, COMPETENCIA);
@@ -256,7 +257,7 @@ class IdempotenciaTest {
         assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_TROCA_PLANO, COMPETENCIA_JULHO))
                 .isEqualByComparingTo("4.90");
 
-        // ja em agosto vale o plano novo: franquia de 10, e o terceiro Pix e isento
+        // ja em agosto vale o plano novo: franquia de 10, e os tres sao isentos
         publicar(UUID.randomUUID().toString(), "pix-904", CLIENTE_TROCA_PLANO);
         publicar(UUID.randomUUID().toString(), "pix-905", CLIENTE_TROCA_PLANO);
         publicar(UUID.randomUUID().toString(), "pix-906", CLIENTE_TROCA_PLANO);
@@ -266,57 +267,121 @@ class IdempotenciaTest {
                 .isEqualByComparingTo("0.00");
     }
 
+    // ------------------------------------------------------------------
+    // a tabela de faixas — regra-de-tarifacao.md
+    // ------------------------------------------------------------------
+
     @Test
     @DisplayName("10 - acima da franquia, o VALOR do Pix escolhe a faixa da tarifa")
     void tarifaVemDaFaixaDoValor() {
-        // cli-0001: ate R$ 500 custa 1,90; ate R$ 5.000 custa 3,50; acima, 7,00.
-        for (int i = 1; i <= 5; i++) {
-            publicar(UUID.randomUUID().toString(), "pix-a0" + i, CLIENTE_FRANQUIA_5);
-        }
-        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_5, 5);
+        // Tabela do Plano PJ: <500 -> 0,50 | <1000 -> 1,00 | <5000 -> 5,00 | resto -> 10,00
+        publicar(UUID.randomUUID().toString(), "pix-a01", CLIENTE_FRANQUIA_2);
+        publicar(UUID.randomUUID().toString(), "pix-a02", CLIENTE_FRANQUIA_2);
+        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 2);
 
-        publicarComValor(UUID.randomUUID().toString(), "pix-a06", CLIENTE_FRANQUIA_5, "100.00");
-        publicarComValor(UUID.randomUUID().toString(), "pix-a07", CLIENTE_FRANQUIA_5, "3000.00");
-        publicarComValor(UUID.randomUUID().toString(), "pix-a08", CLIENTE_FRANQUIA_5, "90000.00");
+        publicarComValor(UUID.randomUUID().toString(), "pix-a03", CLIENTE_FRANQUIA_2, "100.00");
+        publicarComValor(UUID.randomUUID().toString(), "pix-a04", CLIENTE_FRANQUIA_2, "700.00");
+        publicarComValor(UUID.randomUUID().toString(), "pix-a05", CLIENTE_FRANQUIA_2, "3000.00");
+        publicarComValor(UUID.randomUUID().toString(), "pix-a06", CLIENTE_FRANQUIA_2, "90000.00");
 
-        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_5, 8);
-        // 1,90 + 3,50 + 7,00 — cada Pix pagou a faixa do proprio valor
-        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_5, COMPETENCIA))
-                .isEqualByComparingTo("12.40");
+        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 6);
+        // 0,50 + 1,00 + 5,00 + 10,00 — cada Pix pagou a faixa do proprio valor
+        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_2, COMPETENCIA))
+                .isEqualByComparingTo("16.50");
     }
 
     @Test
-    @DisplayName("11 - atingido o teto mensal, os Pix seguintes deixam de ser cobrados")
-    void tetoMensalInterrompeACobranca() {
-        // cli-0006: sem isencao, R$ 0,99 o Pix, teto de R$ 1,98 no mes. Os dois
-        // primeiros sao cobrados e fecham o teto; o terceiro sai zerado.
-        publicar(UUID.randomUUID().toString(), "pix-b01", CLIENTE_COM_TETO);
-        publicar(UUID.randomUUID().toString(), "pix-b02", CLIENTE_COM_TETO);
-        publicar(UUID.randomUUID().toString(), "pix-b03", CLIENTE_COM_TETO);
+    @DisplayName("11 - a fronteira da faixa e EXCLUSIVA: R$ 500,00 paga a faixa de cima")
+    void fronteiraDaFaixaEExclusiva() {
+        // "Limite inferior inclusivo, superior exclusivo." Um Pix de exatamente
+        // R$ 500,00 nao pertence a faixa "< 500": pertence a "500 <= v < 1000",
+        // e paga R$ 1,00. Com a fronteira inclusiva pagaria R$ 0,50 — e o valor
+        // redondo e justamente o mais comum numa transferencia.
+        publicar(UUID.randomUUID().toString(), "pix-b01", CLIENTE_FRANQUIA_2);
+        publicar(UUID.randomUUID().toString(), "pix-b02", CLIENTE_FRANQUIA_2);
+        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 2);
 
-        aguardarQuantidadeDeTarifas(CLIENTE_COM_TETO, 3);
+        publicarComValor(UUID.randomUUID().toString(), "pix-b03", CLIENTE_FRANQUIA_2, "499.99");
+        publicarComValor(UUID.randomUUID().toString(), "pix-b04", CLIENTE_FRANQUIA_2, "500.00");
+
+        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 4);
+        // 0,50 do 499,99 mais 1,00 do 500,00 — nao 1,00 do total
+        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_2, COMPETENCIA))
+                .isEqualByComparingTo("1.50");
+    }
+
+    // ------------------------------------------------------------------
+    // o teto mensal — regra-de-tarifacao.md, passos 3 e 4
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("12 - o estouro do teto e cobrado PARCIALMENTE, ate completar o teto")
+    void tetoEhCobradoParcialmente() {
+        // cli-0006: sem isencao, R$ 10,00 o Pix, teto de R$ 25,00.
+        //   Pix 1 ->  0 + 10 cabe    -> FAIXA         10,00  (acumulado 10)
+        //   Pix 2 -> 10 + 10 cabe    -> FAIXA         10,00  (acumulado 20)
+        //   Pix 3 -> 20 + 10 estoura -> TETO_PARCIAL   5,00  (acumulado 25)
+        //   Pix 4 -> 25 >= 25        -> TETO_ATINGIDO  0,00  (acumulado 25)
+        publicar(UUID.randomUUID().toString(), "pix-c01", CLIENTE_COM_TETO);
+        publicar(UUID.randomUUID().toString(), "pix-c02", CLIENTE_COM_TETO);
+        publicar(UUID.randomUUID().toString(), "pix-c03", CLIENTE_COM_TETO);
+        publicar(UUID.randomUUID().toString(), "pix-c04", CLIENTE_COM_TETO);
+
+        aguardarQuantidadeDeTarifas(CLIENTE_COM_TETO, 4);
+
+        // A INVARIANTE: o acumulado para EXATAMENTE no teto, nunca acima.
         assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_COM_TETO, COMPETENCIA))
-                .isEqualByComparingTo("1.98");
-        assertThat(situacoes(CLIENTE_COM_TETO, COMPETENCIA, SituacaoDaTarifaVO.TARIFADO))
+                .isEqualByComparingTo("25.00");
+
+        assertThat(situacoes(CLIENTE_COM_TETO, COMPETENCIA, SituacaoDaTarifaVO.FAIXA))
                 .isEqualTo(2L);
+        // uma linha TETO_PARCIAL por competencia, e so uma: e ela que identifica
+        // qual cobranca bateu o teto
+        assertThat(situacoes(CLIENTE_COM_TETO, COMPETENCIA, SituacaoDaTarifaVO.TETO_PARCIAL))
+                .isEqualTo(1L);
         assertThat(situacoes(CLIENTE_COM_TETO, COMPETENCIA, SituacaoDaTarifaVO.TETO_ATINGIDO))
                 .isEqualTo(1L);
     }
 
+    // ------------------------------------------------------------------
+    // invariantes do acumulado
+    // ------------------------------------------------------------------
+
     @Test
-    @DisplayName("12 - a competencia e isolada por mes: a franquia reinicia em setembro")
+    @DisplayName("13 - so o Pix ISENTO consome franquia; o tarifado nao")
+    void apenasOIsentoConsomeFranquia() {
+        // Invariante da especificacao: unidadesFranquiaConsumidas <= franquia do
+        // plano. cli-0002 tem franquia 2; publicando cinco Pix, dois saem
+        // isentos e tres tarifados — e o consumo tem de parar em 2, nao chegar a
+        // 5. O relatorio de fechamento le esse acumulado para dizer quantas
+        // isencoes o contrato de fato concedeu.
+        for (int i = 1; i <= 5; i++) {
+            publicar(UUID.randomUUID().toString(), "pix-d0" + i, CLIENTE_FRANQUIA_2);
+        }
+
+        aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 5);
+        assertThat(repositorio.contarFranquiaConsumida(CLIENTE_FRANQUIA_2, COMPETENCIA))
+                .isEqualTo(2L);
+        assertThat(situacoes(CLIENTE_FRANQUIA_2, COMPETENCIA, SituacaoDaTarifaVO.FRANQUIA))
+                .isEqualTo(2L);
+        assertThat(situacoes(CLIENTE_FRANQUIA_2, COMPETENCIA, SituacaoDaTarifaVO.FAIXA))
+                .isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("14 - a competencia e isolada por mes: a franquia reinicia em setembro")
     void competenciaEIsoladaPorMes() {
-        publicar(UUID.randomUUID().toString(), "pix-c01", CLIENTE_FRANQUIA_2);
-        publicar(UUID.randomUUID().toString(), "pix-c02", CLIENTE_FRANQUIA_2);
+        publicar(UUID.randomUUID().toString(), "pix-e01", CLIENTE_FRANQUIA_2);
+        publicar(UUID.randomUUID().toString(), "pix-e02", CLIENTE_FRANQUIA_2);
         aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 2);
         assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_2, COMPETENCIA))
                 .isEqualByComparingTo("0.00");
 
-        publicarEm(UUID.randomUUID().toString(), "pix-c03", CLIENTE_FRANQUIA_2,
+        publicarEm(UUID.randomUUID().toString(), "pix-e03", CLIENTE_FRANQUIA_2,
                 OCORRIDO_EM_SETEMBRO, VALOR_PADRAO);
         aguardarQuantidadeDeTarifas(CLIENTE_FRANQUIA_2, 1, COMPETENCIA_SETEMBRO);
-        assertThat(repositorio.totalTarifadoNaCompetencia(CLIENTE_FRANQUIA_2, COMPETENCIA_SETEMBRO))
-                .isEqualByComparingTo("0.00");
+        assertThat(situacoes(CLIENTE_FRANQUIA_2, COMPETENCIA_SETEMBRO, SituacaoDaTarifaVO.FRANQUIA))
+                .isEqualTo(1L);
     }
 
     // ------------------------------------------------------------------

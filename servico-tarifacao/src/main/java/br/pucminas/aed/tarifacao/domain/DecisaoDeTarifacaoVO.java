@@ -36,12 +36,24 @@ public final class DecisaoDeTarifacaoVO {
 
     /** O Pix coube na franquia mensal do plano. */
     public static DecisaoDeTarifacaoVO isentoPorFranquia() {
-        return new DecisaoDeTarifacaoVO(SituacaoDaTarifaVO.ISENTO_FRANQUIA, ZERO);
+        return new DecisaoDeTarifacaoVO(SituacaoDaTarifaVO.FRANQUIA, ZERO);
     }
 
-    /** Acima da franquia: cobrado pela faixa de valor. */
-    public static DecisaoDeTarifacaoVO tarifado(BigDecimal valor) {
-        return new DecisaoDeTarifacaoVO(SituacaoDaTarifaVO.TARIFADO, valor);
+    /** Acima da franquia: cobrado pelo valor integral da faixa. */
+    public static DecisaoDeTarifacaoVO tarifadoPelaFaixa(BigDecimal valor) {
+        return new DecisaoDeTarifacaoVO(SituacaoDaTarifaVO.FAIXA, valor);
+    }
+
+    /**
+     * Cobrado por valor reduzido, ate completar exatamente o teto.
+     *
+     * E a unica linha TETO_PARCIAL de uma competencia, e e ela que mantem a
+     * invariante valorTarifadoNaCompetencia <= teto. Sem esta saida, a cobranca
+     * integral de uma faixa que nao cabe no espaco restante faria o mes fechar
+     * acima do teto contratado.
+     */
+    public static DecisaoDeTarifacaoVO tetoParcial(BigDecimal valor) {
+        return new DecisaoDeTarifacaoVO(SituacaoDaTarifaVO.TETO_PARCIAL, valor);
     }
 
     /** O total cobrado na competencia ja atingiu o teto do plano. */

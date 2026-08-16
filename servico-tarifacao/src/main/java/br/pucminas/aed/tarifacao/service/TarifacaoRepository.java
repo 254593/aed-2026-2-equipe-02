@@ -138,12 +138,12 @@ public class TarifacaoRepository {
     /** As faixas de preco de uma vigencia, na ordem em que devem ser avaliadas. */
     private List<FaixaDeTarifaVO> buscarFaixas(String clienteId, String vigenciaInicio) {
         return jdbc.query(
-                "SELECT valor_ate, valor_tarifa "
+                "SELECT valor_abaixo_de, valor_tarifa "
                         + "  FROM oferta_faixa "
                         + " WHERE cliente_id = ? AND vigencia_inicio = ? "
                         + " ORDER BY ordem",
                 (rs, linha) -> new FaixaDeTarifaVO(
-                        rs.getBigDecimal("valor_ate"),
+                        rs.getBigDecimal("valor_abaixo_de"),
                         rs.getBigDecimal("valor_tarifa")),
                 clienteId, vigenciaInicio);
     }
@@ -153,14 +153,25 @@ public class TarifacaoRepository {
     // ------------------------------------------------------------------
 
     /**
-     * Quantos Pix deste cliente ja consumiram franquia na competencia.
+     * Quantas unidades de franquia o cliente ja consumiu na competencia — o
+     * `unidadesFranquiaConsumidas` da especificacao.
      *
-     * Nao e "quantas linhas de tarifa existem": SEM_CONTRATO e TETO_ATINGIDO
-     * viram linha, porque sao fatos, mas nao gastam uma cota que o cliente nao
-     * contratou ou que ja nao esta sendo cobrada. Quem sabe quais situacoes
-     * consomem e o proprio enum — a lista do IN e derivada dele, e nao escrita
-     * a mao, para que uma situacao nova acrescentada amanha nao passe
-     * silenciosamente por fora desta contagem.
+     * Nao e "quantas linhas de tarifa existem": so o Pix ISENTO consome. Os
+     * tarifados e os nao cobrados viram linha, porque sao fatos, mas nao gastam
+     * uma cota — os primeiros existem justamente porque nao havia mais nenhuma.
+     * Contar tudo violaria a invariante da especificacao
+     * (unidadesFranquiaConsumidas <= franquia do plano).
+     *
+     * Quem sabe quais situacoes consomem e o proprio enum: a lista do IN e
+     * derivada dele, e nao escrita a mao, para que uma situacao nova
+     * acrescentada amanha nao passe silenciosamente por fora desta contagem.
+     *
+     * DERIVAR EM VEZ DE ACUMULAR e deliberado. A especificacao descreve um
+     * campo `unidadesFranquiaConsumidas` que incrementa a cada isencao; aqui ele
+     * e calculado por COUNT sobre a propria tabela `tarifa`. O resultado e o
+     * mesmo e a propriedade importante se mantem — o acumulado nunca decrementa
+     * —, mas sem um UPDATE em delta, que e exatamente o tipo de operacao que a
+     * reentrega quebra: contar linhas e naturalmente idempotente, somar +1 nao.
      */
     public long contarFranquiaConsumida(String clienteId, String competencia) {
         List<String> situacoes = situacoesQueConsomemFranquia();

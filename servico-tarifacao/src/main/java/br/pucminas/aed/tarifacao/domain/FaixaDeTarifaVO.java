@@ -4,45 +4,55 @@ import java.math.BigDecimal;
 import java.util.Objects;
 
 /**
- * Uma faixa de tarifa do plano: ate tanto de valor transferido, custa tanto.
+ * Uma faixa da tabela de tarifas: valor ABAIXO DE tanto custa tanto.
  *
- * O ADR-002 declara que o Pix acima da franquia e "tarifado por faixa de
- * valor", e nao por um preco unico. E a forma usual da tarifa bancaria: uma
- * transferencia de R$ 80 e uma de R$ 80.000 custam diferente porque carregam
- * risco e custo operacional diferentes.
+ * FRONTEIRA EXCLUSIVA, E ISSO MUDA DINHEIRO. A especificacao da regra define
+ * "limite inferior inclusivo, superior exclusivo", e a diferenca aparece
+ * exatamente nos valores redondos, que sao os mais comuns numa transferencia:
  *
- * O limite e INCLUSIVO, e a ultima faixa tem limite nulo — "daqui para cima".
+ *     Pix de R$ 500,00  com fronteira EXCLUSIVA -> faixa dos 500..1000 -> R$ 1,00
+ *     Pix de R$ 500,00  com fronteira inclusiva -> faixa dos ate 500   -> R$ 0,50
+ *
+ * O campo se chama valorAbaixoDe, e nao valorAte, de proposito: "ate" se le
+ * como inclusivo e foi assim que a primeira versao desta classe errou. O nome
+ * carrega a semantica para que ninguem precise lembrar dela.
+ *
+ * A faixa nao guarda limite inferior: ele e o limite superior da faixa
+ * anterior, e a ordem de avaliacao garante que nao ha intervalo descoberto nem
+ * valor pertencente a duas faixas. A ultima faixa tem limite nulo — "daqui para
+ * cima".
+ *
  * Objeto de valor: sem identidade, imutavel, so faz sentido dentro da oferta
  * que o contem.
  */
 public final class FaixaDeTarifaVO {
 
-    /** Limite superior inclusivo. Nulo significa faixa sem teto, a ultima. */
-    private final BigDecimal valorAte;
+    /** Limite superior EXCLUSIVO. Nulo significa a ultima faixa, sem teto. */
+    private final BigDecimal valorAbaixoDe;
     private final BigDecimal valorTarifa;
 
-    public FaixaDeTarifaVO(BigDecimal valorAte, BigDecimal valorTarifa) {
-        this.valorAte = valorAte;
+    public FaixaDeTarifaVO(BigDecimal valorAbaixoDe, BigDecimal valorTarifa) {
+        this.valorAbaixoDe = valorAbaixoDe;
         this.valorTarifa = Objects.requireNonNull(valorTarifa, "valorTarifa e obrigatoria");
     }
 
     /**
      * Se um Pix deste valor cai nesta faixa.
      *
-     * compareTo, e nao equals: BigDecimal considera 1.90 e 1.900 objetos
+     * compareTo, e nao equals: BigDecimal considera 500 e 500.00 objetos
      * diferentes por causa da escala, e a comparacao por equals produziria
      * falso negativo conforme o banco devolvesse a coluna com uma escala ou
      * outra.
      */
     public boolean cobre(BigDecimal valorDoPix) {
-        if (valorAte == null) {
+        if (valorAbaixoDe == null) {
             return true;
         }
-        return valorDoPix.compareTo(valorAte) <= 0;
+        return valorDoPix.compareTo(valorAbaixoDe) < 0;
     }
 
-    public BigDecimal getValorAte() {
-        return valorAte;
+    public BigDecimal getValorAbaixoDe() {
+        return valorAbaixoDe;
     }
 
     public BigDecimal getValorTarifa() {
@@ -52,10 +62,10 @@ public final class FaixaDeTarifaVO {
     @Override
     public String toString() {
         String limite;
-        if (valorAte == null) {
-            limite = "acima";
+        if (valorAbaixoDe == null) {
+            limite = "daqui para cima";
         } else {
-            limite = "ate " + valorAte;
+            limite = "abaixo de " + valorAbaixoDe;
         }
         return "FaixaDeTarifaVO{" + limite + " -> " + valorTarifa + "}";
     }

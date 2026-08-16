@@ -15,17 +15,25 @@ import br.pucminas.aed.tarifacao.domain.OfertaVO;
 import br.pucminas.aed.tarifacao.domain.PixRealizadoEvent;
 
 /**
- * O ponto de decisao do dominio — a PoliticaDeTarifacao do ADR-002.
+ * O ponto de decisao do dominio — a PoliticaDeTarifacao do ADR-002, com o
+ * algoritmo detalhado em docs/regra-de-tarifacao.md.
  *
- * Para cada Pix liquidado, decide entre QUATRO saidas:
+ * Para cada Pix liquidado, decide entre CINCO saidas:
  *
- *   SEM_CONTRATO     nao ha oferta vigente na competencia -> nao cobra
- *   ISENTO_FRANQUIA  coube na franquia mensal do plano    -> nao cobra
- *   TARIFADO         acima da franquia                    -> cobra pela faixa
- *   TETO_ATINGIDO    o teto de gasto do mes ja foi atingido -> nao cobra
+ *   SEM_CONTRATO   nao ha oferta vigente na competencia   -> nao cobra
+ *   FRANQUIA       coube na franquia mensal do plano      -> nao cobra
+ *   FAIXA          acima da franquia                      -> cobra a faixa
+ *   TETO_PARCIAL   a faixa nao cabe no espaco do teto     -> cobra o que cabe
+ *   TETO_ATINGIDO  o teto do mes ja estava completo       -> nao cobra
  *
- * Aprova, recusa e limita: e decisao, nao calculo. As tres primeiras vem da
- * secao Decisao do ADR; a quarta e o "limita".
+ * Aprova, recusa e limita: e decisao, nao calculo. Quatro delas vem da
+ * especificacao da regra; SEM_CONTRATO vem do ADR-002, e cobre o caso que a
+ * especificacao nao trata.
+ *
+ * A DECISAO E SOBRE O ACUMULADO, NAO SOBRE O PAYLOAD. O que decide nao e o
+ * evento que chegou, e sim quanta franquia a empresa ja gastou e quanto ja foi
+ * cobrado dela na competencia. E isso que torna a tarifacao uma decisao sobre
+ * agregado — e o que obriga a serializar o processamento por empresa.
  *
  * QUATRO DECISOES QUE VALEM A LEITURA
  *
@@ -98,12 +106,21 @@ public class TarifacaoService {
     }
 
     /**
-     * A politica, na ordem em que as perguntas precisam ser feitas.
+     * A politica, na ordem em que a especificacao da regra manda perguntar.
      *
-     * A ordem importa e nao e arbitraria: sem contrato nao se pergunta pela
-     * franquia, e o teto so faz sentido depois de saber que haveria cobranca.
-     * Inverter a segunda e a terceira faria um Pix isento "atingir o teto" e
-     * sair com a situacao errada no extrato.
+     *   1. ha oferta vigente na competencia?  nao -> SEM_CONTRATO
+     *   2. franquia consumida < franquia do plano?  sim -> FRANQUIA
+     *   3. tarifa = faixa(valor do Pix)
+     *   4. ja tarifado >= teto?  sim -> TETO_ATINGIDO
+     *   5. ja tarifado + tarifa > teto?  sim -> TETO_PARCIAL (o que couber)
+     *                                    nao -> FAIXA (integral)
+     *
+     * A ordem nao e arbitraria. Sem contrato nao se pergunta pela franquia. A
+     * FRANQUIA E SEMPRE CONSUMIDA PRIMEIRO, antes de qualquer verificacao de
+     * teto: uma empresa de alto volume termina o mes com as 10 de 10 isencoes
+     * usadas independentemente do teto, e e isso que mantem o relatorio de
+     * fechamento fiel. E o teto so e consultado depois de calcular a tarifa,
+     * porque o passo 5 precisa saber quanto caberia cobrar.
      */
     private DecisaoDeTarifacaoVO decidir(PixRealizadoEvent evento, String competencia) {
 
@@ -115,33 +132,53 @@ public class TarifacaoService {
         }
         OfertaVO oferta = vigente.get();
 
-        long consumidos = repositorio.contarFranquiaConsumida(evento.getClienteId(), competencia);
-        if (consumidos < oferta.getPixGratuitosMes()) {
+        long consumidas = repositorio.contarFranquiaConsumida(evento.getClienteId(), competencia);
+        if (consumidas < oferta.getPixGratuitosMes()) {
             return DecisaoDeTarifacaoVO.isentoPorFranquia();
         }
 
-        if (tetoJaAtingido(oferta, evento.getClienteId(), competencia)) {
-            return DecisaoDeTarifacaoVO.tetoAtingido();
+        BigDecimal tarifa = oferta.tarifaPara(evento.getValor());
+
+        if (!oferta.temTetoMensal()) {
+            return DecisaoDeTarifacaoVO.tarifadoPelaFaixa(tarifa);
         }
 
-        return DecisaoDeTarifacaoVO.tarifado(oferta.tarifaPara(evento.getValor()));
+        return aplicarTeto(oferta, evento.getClienteId(), competencia, tarifa);
     }
 
     /**
-     * O teto limita o GASTO do mes, em reais — nao a quantidade de Pix. Compara
-     * o que ja foi cobrado na competencia com o teto do plano.
+     * O teto limita o GASTO do mes, em reais — nao a quantidade de Pix.
      *
-     * A comparacao e >= : atingir o teto ja basta para parar de cobrar. E
-     * compareTo, nao equals, porque BigDecimal distingue 1.98 de 1.980 pela
-     * escala e a igualdade por equals falharia conforme a escala devolvida pelo
-     * banco.
+     * O ESTOURO E COBRADO PARCIALMENTE, ate completar exatamente o teto. A
+     * alternativa — nao cobrar nada quando a tarifa nao cabe — exigiria um
+     * sinalizador de "teto atingido" separado do acumulador, que precisaria ser
+     * ressincronizado a cada estorno. Com a cobranca parcial, "teto atingido" e
+     * derivavel do proprio acumulado (jaCobrado >= teto) e o estado se recompoe
+     * sozinho quando uma compensacao devolve espaco.
+     *
+     * E e o que sustenta a invariante valorTarifadoNaCompetencia <= teto: sem o
+     * parcial, uma tarifa de faixa alta chegando com pouco espaco restante
+     * faria o mes fechar acima do valor contratado.
+     *
+     * Todas as comparacoes por compareTo, nunca equals: BigDecimal distingue
+     * 2000 de 2000.00 pela escala, e a igualdade por equals falharia conforme a
+     * escala que o banco devolvesse.
      */
-    private boolean tetoJaAtingido(OfertaVO oferta, String clienteId, String competencia) {
-        if (!oferta.temTetoMensal()) {
-            return false;
-        }
+    private DecisaoDeTarifacaoVO aplicarTeto(OfertaVO oferta, String clienteId,
+            String competencia, BigDecimal tarifa) {
+
+        BigDecimal teto = oferta.getTetoMensal();
         BigDecimal jaCobrado = repositorio.totalTarifadoNaCompetencia(clienteId, competencia);
-        return jaCobrado.compareTo(oferta.getTetoMensal()) >= 0;
+
+        if (jaCobrado.compareTo(teto) >= 0) {
+            return DecisaoDeTarifacaoVO.tetoAtingido();
+        }
+
+        if (jaCobrado.add(tarifa).compareTo(teto) > 0) {
+            return DecisaoDeTarifacaoVO.tetoParcial(teto.subtract(jaCobrado));
+        }
+
+        return DecisaoDeTarifacaoVO.tarifadoPelaFaixa(tarifa);
     }
 
     /**
