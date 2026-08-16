@@ -46,10 +46,12 @@ Como ele atende cada um dos quatro critérios:
   uma empresa cujo contrato já não vigia, e o Faturamento, que consulta a fonte autoritativa, recusa
   a competência. Isso obriga a desfazer, em ordem inversa, efeitos já commitados em dois sistemas:
   `estornar` no Parceiro de Lançamentos, `PixTarifado` para `estornada` com motivo e correlação,
-  devolução da unidade de franquia consumida, e o Pix marcado `nao_tarifavel` para que replay não
-  recobre. Nada é apagado: compensação é operação inversa com rastro, não rollback, e o rastro é a
-  defesa contra a acusação de cobrança indevida. Recusa por contrato inativo é definitiva: repetir
-  não muda o resultado, o que a distingue da indisponibilidade do parceiro, que é retry e DLQ.
+  registro do estorno no acumulado da competência, e o Pix marcado `nao_tarifavel` para que replay
+  não recobre. Nada é apagado nem decrementado: compensação é operação inversa com rastro, não
+  rollback — o estorno é lançamento de ajuste na fatura, nunca reversão de uma decisão já tomada —
+  e o rastro é a defesa contra a acusação de cobrança indevida. Recusa por contrato inativo é
+  definitiva: repetir não muda o resultado, o que a distingue da indisponibilidade do parceiro, que
+  é retry e DLQ.
 
 - **algo que valha reprocessar:** o **fechamento mensal de tarifas por empresa**, reconstruído do
   histórico de aplicações e estornos. Serve à auditoria ("por que esta empresa pagou este valor"), à
@@ -91,8 +93,8 @@ contra a mediana; se a hot partition aparecer, a saída é tornar o consumo de f
 (reserva por token), não aumentar partições.
 
 **O que vai ficar difícil na aula 05.** Três coisas, já mapeadas. Primeira: a compensação atravessa
-dois sistemas sem atomicidade, e uma falha no meio dela deixa lançamento estornado com franquia não
-devolvida, ou o inverso; a mitigação é compensação idempotente por chave de correlação, com
+dois sistemas sem atomicidade, e uma falha no meio dela deixa lançamento estornado no parceiro sem o
+ajuste registrado na fatura, ou o inverso; a mitigação é compensação idempotente por chave de correlação, com
 `estorno_solicitado` e `estorno_confirmado` como estados explícitos da tarifa, nunca um booleano.
 Segunda: o **estado indeterminado**, quando o Parceiro de Lançamentos dá timeout e não se sabe se
 lançou; não se pode estornar um lançamento que talvez não exista, então o passo obrigatório é
