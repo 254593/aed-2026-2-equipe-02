@@ -18,12 +18,21 @@ Equipe 02 · líder: **Evandro V. Junior**
 | _(a preencher)_ | | |
 
 <!--
-RASCUNHO — três coisas para a equipe conferir antes da tag:
-  1. faltam os três integrantes restantes (a turma organiza equipes de sete);
-  2. líder inferido de quem criou o repositório; confirmar;
-  3. a matrícula do Evandro veio do e-mail dos commits (1050413), mas a conta do
-     GitHub é 254593. O enunciado (secao 2.2) exige NOME DE USUARIO = MATRICULA,
-     e o checklist item 17 confere isso na aba Contributors. Vale alinhar as duas.
+PENDENTE — para a equipe conferir antes da entrega:
+  1. faltam os tres integrantes restantes (a turma organiza equipes de sete),
+     e nenhum deles tem commit proprio ainda — item 17 do checklist;
+  2. lider inferido de quem criou o repositorio; confirmar;
+  3. contas do GitHub x matricula (secao 2.2 exige NOME DE USUARIO = MATRICULA):
+       254337  Allainn      OK  (conta renomeada em 16/08)
+       254593  Evandro      OK
+       1665626 Amanda       conferir se e a matricula
+       1125713 Alexsander   DIVERGE: o README diz 254779, e as duas contas
+                            existem. Os commits dele saem como 1125713. A saida
+                            e adicionar 1125713@pucminas.edu.br em Settings ->
+                            Emails da conta 254779: os commits migram sozinhos,
+                            porque a atribuicao do GitHub e pelo e-mail;
+  4. docs/IA.md ainda tem uma secao so. Sao 10% da nota, e o criterio pede tres
+     interacoes com ao menos uma recusa justificada POR INTEGRANTE.
 -->
 
 ## O domínio em uma frase
