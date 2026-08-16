@@ -55,7 +55,7 @@ public class PixService {
         validar(realizacao);
 
         PixRealizadoEvent evento = new PixRealizadoEvent(
-                UUID.randomUUID().toString(),
+                identidadeDe(realizacao),
                 Instant.now(relogio),
                 realizacao.getIdTransacaoPix(),
                 realizacao.getIdEmpresa(),
@@ -75,6 +75,26 @@ public class PixService {
         return evento;
     }
 
+    /**
+     * A identidade do fato: a chave enviada pelo cliente quando houver, um UUID
+     * novo quando nao houver.
+     *
+     * Aceitar a chave do cliente e o que torna o POST seguro de repetir. Sem
+     * ela, um retry por timeout publicaria DOIS eventos com identidades
+     * diferentes para o mesmo Pix; como a deduplicacao do consumidor e pelo
+     * eventoId, os dois passariam e a empresa seria cobrada duas vezes. Com
+     * ela, o segundo POST produz o mesmo ce_id e o consumidor descarta.
+     *
+     * Gerar quando ausente mantem o caminho simples funcionando: quem nao se
+     * importa com retry nao precisa saber que a chave existe.
+     */
+    private String identidadeDe(RealizacaoPixVO realizacao) {
+        if (realizacao.getEventoId() != null && !realizacao.getEventoId().isBlank()) {
+            return realizacao.getEventoId();
+        }
+        return UUID.randomUUID().toString();
+    }
+
     private void adicionarCabecalhos(ProducerRecord<String, Object> registro,
                                      PixRealizadoEvent evento) {
         registro.headers().add("ce_specversion", "1.0".getBytes(UTF_8));
@@ -87,6 +107,12 @@ public class PixService {
     private void validar(RealizacaoPixVO realizacao) {
         if (realizacao == null) {
             throw new IllegalArgumentException("Os dados do Pix sao obrigatorios");
+        }
+        // eventoId AUSENTE e caminho valido — o servico gera. Presente porem em
+        // branco e erro de cliente: sinaliza intencao de controlar a identidade
+        // sem de fato informa-la, e gerar um UUID ali esconderia o defeito.
+        if (realizacao.getEventoId() != null && realizacao.getEventoId().isBlank()) {
+            throw new IllegalArgumentException("eventoId, quando informado, nao pode ser vazio");
         }
         if (realizacao.getIdTransacaoPix() == null || realizacao.getIdTransacaoPix().isBlank()) {
             throw new IllegalArgumentException("idTransacaoPix e obrigatorio");

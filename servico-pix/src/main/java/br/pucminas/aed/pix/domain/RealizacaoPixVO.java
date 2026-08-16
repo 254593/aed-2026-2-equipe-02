@@ -8,6 +8,22 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /** Dados recebidos pela API para registrar que um Pix foi realizado. */
 public final class RealizacaoPixVO {
 
+    /**
+     * CHAVE DE IDEMPOTENCIA DO COMANDO, opcional.
+     *
+     * Informado, e ele que vira a identidade do fato publicado (o ce_id do
+     * envelope): repetir o mesmo POST produz o MESMO evento, e o consumidor o
+     * descarta como reentrega. Ausente, o servico gera um UUID.
+     *
+     * Existe porque o POST e repetivel por fora: um timeout ou uma falha de
+     * rede fazem o cliente tentar de novo, e sem a chave o servico publicaria
+     * DOIS eventos distintos para o mesmo Pix — identidades diferentes, mesmo
+     * idTransacaoPix. Como a deduplicacao do consumidor e pelo eventoId, os
+     * dois passariam e a empresa seria cobrada duas vezes. E o mesmo papel do
+     * cabecalho Idempotency-Key das APIs de pagamento.
+     */
+    private final String eventoId;
+
     private final String idTransacaoPix;
     private final String idEmpresa;
     private final BigDecimal valor;
@@ -18,7 +34,8 @@ public final class RealizacaoPixVO {
     private final String pagadorNome;
 
     @JsonCreator
-    public RealizacaoPixVO(@JsonProperty("idTransacaoPix") String idTransacaoPix,
+    public RealizacaoPixVO(@JsonProperty("eventoId") String eventoId,
+                           @JsonProperty("idTransacaoPix") String idTransacaoPix,
                            @JsonProperty("idEmpresa") String idEmpresa,
                            @JsonProperty("valor") BigDecimal valor,
                            @JsonProperty("chavePix") String chavePix,
@@ -26,6 +43,7 @@ public final class RealizacaoPixVO {
                            @JsonProperty("bancoDestino") String bancoDestino,
                            @JsonProperty("endToEndId") String endToEndId,
                            @JsonProperty("pagadorNome") String pagadorNome) {
+        this.eventoId = eventoId;
         this.idTransacaoPix = idTransacaoPix;
         this.idEmpresa = idEmpresa;
         this.valor = valor;
@@ -34,6 +52,10 @@ public final class RealizacaoPixVO {
         this.bancoDestino = bancoDestino;
         this.endToEndId = endToEndId;
         this.pagadorNome = pagadorNome;
+    }
+
+    public String getEventoId() {
+        return eventoId;
     }
 
     public String getIdTransacaoPix() {

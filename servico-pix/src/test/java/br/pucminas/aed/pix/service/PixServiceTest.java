@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -54,7 +55,7 @@ class PixServiceTest {
         when(clienteDoBroker.send(any(ProducerRecord.class))).thenReturn(retorno);
 
         RealizacaoPixVO realizacao = new RealizacaoPixVO(
-                "pix-001", "emp-0001", new BigDecimal("150.00"),
+                null, "pix-001", "emp-0001", new BigDecimal("150.00"),
                 "fulano@exemplo.com", "EMAIL", "999",
                 "E99900000202608141300000000001", "Empresa Ficticia");
 
@@ -88,7 +89,7 @@ class PixServiceTest {
     @org.junit.jupiter.api.DisplayName("lanca excecao quando idTransacaoPix e branco")
     void lancaExcecaoQuandoIdTransacaoPixEmBranco() {
         RealizacaoPixVO realizacao = new RealizacaoPixVO(
-                "", "emp-0001", new BigDecimal("150.00"),
+                null, "", "emp-0001", new BigDecimal("150.00"),
                 "fulano@exemplo.com", "EMAIL", "999",
                 "E99900000202608141300000000001", "Empresa Ficticia");
 
@@ -100,7 +101,7 @@ class PixServiceTest {
     @org.junit.jupiter.api.DisplayName("lanca excecao quando idEmpresa e branco")
     void lancaExcecaoQuandoIdEmpresaEmBranco() {
         RealizacaoPixVO realizacao = new RealizacaoPixVO(
-                "pix-001", "", new BigDecimal("150.00"),
+                null, "pix-001", "", new BigDecimal("150.00"),
                 "fulano@exemplo.com", "EMAIL", "999",
                 "E99900000202608141300000000001", "Empresa Ficticia");
 
@@ -112,7 +113,7 @@ class PixServiceTest {
     @org.junit.jupiter.api.DisplayName("lanca excecao quando valor e zero")
     void lancaExcecaoQuandoValorEZero() {
         RealizacaoPixVO realizacao = new RealizacaoPixVO(
-                "pix-001", "emp-0001", BigDecimal.ZERO,
+                null, "pix-001", "emp-0001", BigDecimal.ZERO,
                 "fulano@exemplo.com", "EMAIL", "999",
                 "E99900000202608141300000000001", "Empresa Ficticia");
 
@@ -124,7 +125,7 @@ class PixServiceTest {
     @org.junit.jupiter.api.DisplayName("lanca excecao quando valor e negativo")
     void lancaExcecaoQuandoValorENegativo() {
         RealizacaoPixVO realizacao = new RealizacaoPixVO(
-                "pix-001", "emp-0001", new BigDecimal("-1.00"),
+                null, "pix-001", "emp-0001", new BigDecimal("-1.00"),
                 "fulano@exemplo.com", "EMAIL", "999",
                 "E99900000202608141300000000001", "Empresa Ficticia");
 
@@ -133,13 +134,13 @@ class PixServiceTest {
     }
 
     @Test
-    @org.junit.jupiter.api.DisplayName("eventoId e unico a cada chamada")
-    void eventoIdUnicoACadaChamada() {
+    @org.junit.jupiter.api.DisplayName("eventoId e unico a cada chamada quando NAO informado")
+    void eventoIdEUnicoQuandoNaoInformado() {
         when(clienteDoBroker.send(any(ProducerRecord.class)))
                 .thenReturn(new CompletableFuture<>(), new CompletableFuture<>());
 
         RealizacaoPixVO realizacao = new RealizacaoPixVO(
-                "pix-001", "emp-0001", new BigDecimal("150.00"),
+                null, "pix-001", "emp-0001", new BigDecimal("150.00"),
                 "fulano@exemplo.com", "EMAIL", "999",
                 "E99900000202608141300000000001", "Empresa Ficticia");
 
@@ -147,6 +148,50 @@ class PixServiceTest {
         PixRealizadoEvent segundo = pixService.realizar(realizacao);
 
         assertThat(primeiro.getEventoId()).isNotEqualTo(segundo.getEventoId());
+    }
+
+    /**
+     * O teste que sustenta a verificacao manual do item 5 do checklist: com a
+     * chave informada, repetir o POST produz o MESMO ce_id, e e por isso que o
+     * consumidor consegue descartar a reentrega. Sem esta propriedade, cada POST
+     * seria um fato novo e a deduplicacao nunca seria exercitada pelo HTTP.
+     */
+    @Test
+    @org.junit.jupiter.api.DisplayName("eventoId informado e preservado no evento e no ce_id")
+    void eventoIdInformadoEPreservado() {
+        when(clienteDoBroker.send(any(ProducerRecord.class)))
+                .thenReturn(new CompletableFuture<>(), new CompletableFuture<>());
+
+        RealizacaoPixVO realizacao = new RealizacaoPixVO(
+                "chave-fixa-123", "pix-001", "emp-0001", new BigDecimal("150.00"),
+                "fulano@exemplo.com", "EMAIL", "999",
+                "E99900000202608141300000000001", "Empresa Ficticia");
+
+        PixRealizadoEvent primeiro = pixService.realizar(realizacao);
+        PixRealizadoEvent segundo = pixService.realizar(realizacao);
+
+        assertThat(primeiro.getEventoId()).isEqualTo("chave-fixa-123");
+        assertThat(segundo.getEventoId()).isEqualTo("chave-fixa-123");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<ProducerRecord<String, Object>> captor =
+                ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(clienteDoBroker, times(2)).send(captor.capture());
+
+        assertThat(cabecalho(captor.getAllValues().get(0), "ce_id")).isEqualTo("chave-fixa-123");
+        assertThat(cabecalho(captor.getAllValues().get(1), "ce_id")).isEqualTo("chave-fixa-123");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("lanca excecao quando eventoId e informado em branco")
+    void lancaExcecaoQuandoEventoIdEmBranco() {
+        RealizacaoPixVO realizacao = new RealizacaoPixVO(
+                "  ", "pix-001", "emp-0001", new BigDecimal("150.00"),
+                "fulano@exemplo.com", "EMAIL", "999",
+                "E99900000202608141300000000001", "Empresa Ficticia");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> pixService.realizar(realizacao));
     }
 
     private String cabecalho(ProducerRecord<String, Object> registro, String nome) {

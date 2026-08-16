@@ -20,7 +20,7 @@ class PixControllerTest {
         PixService pixService = mock(PixService.class);
         PixController controller = new PixController(pixService);
         RealizacaoPixVO realizacao = new RealizacaoPixVO(
-                "pix-001", "emp-0001", new BigDecimal("150.00"),
+                null, "pix-001", "emp-0001", new BigDecimal("150.00"),
                 "fulano@exemplo.com", "EMAIL", "999",
                 "E99900000202608141300000000001", "Empresa Ficticia");
         PixRealizadoEvent evento = new PixRealizadoEvent(
