@@ -184,4 +184,11 @@ apura o líquido.
   comutativa.
 - **Estorno após o fechamento** não mexe em estado de decisão de mês fechado: é o mesmo lançamento
   de ajuste, processado pelo mecanismo de ajuste retroativo já previsto na seção Competência.
+- **Estorno de isento não devolve a unidade nem gera estorno de outro Pix.** Se a unidade "gasta"
+  no Pix invalidado fez um Pix posterior pagar faixa, a correção é um **crédito de ajuste no
+  fechamento**, no valor da faixa — linha nova na fatura, sem tocar em decisão nem em sistema
+  externo. Estorno (da saga) desfaz um efeito indevido de um Pix tarifado recusado; crédito (do
+  fechamento) corrige o agregado do mês. Manter a distinção é o que preserva a regra central. Na
+  prática o caso é quase vazio: contrato inativo invalida a competência inteira, e o "Pix
+  posterior" seria recusado também.
 

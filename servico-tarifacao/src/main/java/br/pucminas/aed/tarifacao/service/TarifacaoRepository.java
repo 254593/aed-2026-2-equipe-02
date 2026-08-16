@@ -211,7 +211,18 @@ public class TarifacaoRepository {
         return nomes;
     }
 
-    /** Total em reais ja cobrado da empresa na competencia. Alimenta o teto mensal. */
+    /**
+     * Total em reais ja cobrado da empresa na competencia — o
+     * `valorTarifadoNaCompetencia` da especificacao. Alimenta o teto mensal.
+     *
+     * Derivado por SUM sobre as linhas de cobranca, no mesmo espirito do
+     * DERIVAR EM VEZ DE ACUMULAR documentado em contarFranquiaConsumida. A
+     * propriedade que sustenta o teto e que este acumulado NUNCA DECREMENTA:
+     * estorno e ajuste de fatura em acumulador proprio
+     * (valorEstornadoNaCompetencia, na especificacao) e JAMAIS pode virar linha
+     * negativa na tabela `tarifa` — se virar, o SUM decrementa, o teto reabre
+     * em silencio e decisoes ja tomadas ficam inconsistentes.
+     */
     public BigDecimal totalTarifadoNaCompetencia(String idEmpresa, String competencia) {
         BigDecimal total = jdbc.queryForObject(
                 "SELECT COALESCE(SUM(valor), 0) FROM tarifa WHERE id_empresa = ? AND competencia = ?",

@@ -150,11 +150,14 @@ public class TarifacaoService {
      * O teto limita o GASTO do mes, em reais — nao a quantidade de Pix.
      *
      * O ESTOURO E COBRADO PARCIALMENTE, ate completar exatamente o teto. A
-     * alternativa — nao cobrar nada quando a tarifa nao cabe — exigiria um
-     * sinalizador de "teto atingido" separado do acumulador, que precisaria ser
-     * ressincronizado a cada estorno. Com a cobranca parcial, "teto atingido" e
-     * derivavel do proprio acumulado (jaCobrado >= teto) e o estado se recompoe
-     * sozinho quando uma compensacao devolve espaco.
+     * alternativa — nao cobrar nada quando a tarifa nao cabe — deixaria o
+     * acumulado abaixo do teto para sempre, e um Pix barato posterior voltaria
+     * a ser cobrado; honrar "depois do teto, nada e cobrado" exigiria um
+     * sinalizador separado do acumulador. Com a cobranca parcial, "teto
+     * atingido" e derivavel do proprio acumulado (jaCobrado >= teto).
+     *
+     * O acumulado e MONOTONICO: estornos sao ajuste de fatura e nunca o
+     * decrementam (docs/regra-de-tarifacao.md, secao Compensacao).
      *
      * E e o que sustenta a invariante valorTarifadoNaCompetencia <= teto: sem o
      * parcial, uma tarifa de faixa alta chegando com pouco espaco restante
