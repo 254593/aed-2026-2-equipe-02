@@ -108,13 +108,39 @@ curl.exe -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:8080/pix/realiza
 ```
 
 A requisição leva um `RealizacaoPixVO` (o pedido); a resposta devolve o `PixRealizadoEvent` (o
-fato), já com o `eventoId` sorteado e o `liquidadoEm` em ISO-8601. Campo obrigatório faltando ou
-valor menor ou igual a zero responde **400** com o motivo no corpo.
+fato), já com o `eventoId` e o `liquidadoEm` em ISO-8601. Campo obrigatório faltando ou valor menor
+ou igual a zero responde **400** com o motivo no corpo.
 
-Para gastar a franquia, repita o comando trocando o `idTransacaoPix` — o `eventoId` é sorteado a cada
-chamada, então cada requisição é um fato novo.
+Para gastar a franquia, repita o comando trocando o `idTransacaoPix`. O `eventoId` é **opcional** no
+pedido: omitido, o serviço sorteia um por chamada, e cada requisição é um fato novo.
 
 A resposta é **202 Accepted**, não 200: no instante da resposta o Pix ainda não foi tarifado.
+
+### O mesmo evento entregue 3× — item 5 do checklist
+
+Informando o `eventoId`, ele vira a identidade do fato (o `ce_id` do envelope) e o mesmo `POST`
+repetido publica o **mesmo** evento, que o consumidor descarta como reentrega. Rode três vezes:
+
+```bash
+curl -s -o /dev/null -w "HTTP %{http_code}\n" \
+  -X POST http://localhost:8080/pix/realizados \
+  -H "Content-Type: application/json" \
+  -d '{"eventoId":"demo-dedup-001","idTransacaoPix":"pix-dedup","idEmpresa":"emp-0002","valor":700.00}'
+```
+
+```bash
+docker exec e02-postgres psql -U tarifacao -d tarifacao \
+  -c "SELECT evento_id, id_transacao_pix, situacao, valor FROM tarifa WHERE evento_id='demo-dedup-001';"
+```
+
+Esperado: **uma única linha**, e no log do consumidor um `pix processado` seguido de dois
+`evento demo-dedup-001 JA PROCESSADO, descartando em silencio`.
+
+O campo existe por um motivo que vai além da demonstração: sem ele, um retry do `POST` por timeout
+publicaria dois eventos distintos para o mesmo Pix, ambos passariam pela deduplicação — que é pelo
+`eventoId` — e a empresa seria cobrada duas vezes. É o mesmo papel do `Idempotency-Key` das APIs de
+pagamento. O `pix-exemplo.json` não traz o campo, de propósito: com uma chave fixa ali, repetir o
+comando do Passo 4 descartaria Pix reais como reentrega.
 
 ### Ou pelo script, que já traz o roteiro pronto
 
@@ -142,11 +168,12 @@ contrato saindo com valor zero, e o mesmo evento entregue 3× produzindo efeito 
 | `-n 11` | onze Pix seguidos (`-Quantidade` no PowerShell) |
 | `-h` | ajuda |
 
-> **Por que a idempotência não passa pela API HTTP.** O corpo do `POST` é um `RealizacaoPixVO` —
-> o *pedido* —, e quem cria o *fato* (sorteando o `eventoId`) é o `PixService`. Cada chamada é um
-> fato novo, então repetir o `curl` **não** demonstra reentrega. O `--idempotencia` publica direto
-> no tópico com `ce_id` fixo, que é o que o consumidor usa para deduplicar. As duas cargas estão
-> em [scripts/eventos/](scripts/eventos/), com a explicação da diferença.
+> **O `--idempotencia` publica direto no tópico**, com `ce_id` fixo, em vez de passar pela API. Os
+> dois caminhos provam o mesmo efeito — 3 entregas, 1 linha —, com alcances diferentes: pelo broker
+> exercita-se o consumidor isolado, e é o único jeito de publicar mensagem **fora do contrato** (sem
+> `ce_id`, com campo desconhecido); pelo HTTP exercita-se o fluxo completo, incluindo a propagação do
+> `eventoId` para o `ce_id` feita pelo `servico-pix`. As cargas do script estão em
+> [scripts/eventos/](scripts/eventos/).
 
 ### Alternativa sem o publicador
 
