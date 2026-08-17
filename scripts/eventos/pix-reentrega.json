@@ -2,7 +2,7 @@
   "eventoId":       "11111111-1111-1111-1111-111111111111",
   "liquidadoEm":    "2026-08-14T13:00:00.000Z",
   "idTransacaoPix": "pix-reentrega",
-  "idEmpresa":      "emp-0001",
+  "idEmpresa":      "emp-0003",
   "valor":          150.00,
   "chavePix":       "fulano@exemplo.com",
   "tipoChave":      "EMAIL",

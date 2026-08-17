@@ -303,3 +303,100 @@ está correto para as entradas que ele vai receber de fato.
   Demais integrantes: acrescentem a sua subseção abaixo, no mesmo formato
   (### Nome (matrícula) — parte pela qual respondeu).
 -->
+
+### Evandro V. Junior (254593) — ADR-002, especificação da regra e idempotência do publisher
+
+#### 10. Como demonstrar manualmente a deduplicação
+
+**O que foi pedido.** Habilitar a verificação manual exigida pelo item 5 do checklist: o mesmo
+evento entregue três vezes produzindo efeito uma vez.
+
+**O que a ferramenta sugeriu.** Um script PowerShell publicando direto no tópico, com `docker exec`
+e `kafka-console-producer` usando `ce_id` fixo — já que o `eventoId` era gerado no servidor pelo
+`PixService`, e repetir o POST criava sempre um evento novo.
+
+**O que foi aceito.** Tornar o `eventoId` **opcional no request**: informado, vira a identidade do
+fato publicado e o POST repetido produz o mesmo evento; ausente, o serviço gera um UUID. Aceito
+também o argumento da ferramenta de que isso não é conveniência de teste — hoje um retry do POST por
+timeout publicava dois eventos distintos para o mesmo Pix, ambos passavam pela deduplicação (que é
+pelo `eventoId`) e a empresa era cobrada duas vezes, exatamente a cobrança indevida que o ADR-002
+existe para impedir. E aceita a ressalva de **não** incluir o campo no `pix-exemplo.json`: com uma
+chave fixa ali, quem repetisse o comando do README veria Pix reais descartados como reentrega.
+
+**O que foi RECUSADO — publicar direto no broker.** Razão técnica: contorna a aplicação em vez de
+exercitá-la. A verificação manual passaria a validar o consumidor com uma mensagem que o publisher
+nunca produziu, deixando o caminho real sem cobertura; e amarraria a demonstração ao Docker e ao
+nome do container. Pior: o defeito de idempotência do POST continuaria existindo, agora encoberto
+por um teste que passa.
+
+---
+
+#### 11. Anonimizar a regra vinda da operação real
+
+**O que foi pedido.** Adaptar a política de tarifação trazida da experiência profissional para o
+repositório público, sem expor regra interna nem incorrer em quebra de sigilo.
+
+**O que a ferramenta sugeriu.** Trocar os nomes — empresa, sistema interno, cliente — por fictícios
+e manter o resto da regra como estava, apoiando-se no aviso do enunciado de que "a regra de negócio
+é o que se avalia, e ela sobrevive à troca de nomes".
+
+**O que foi aceito.** A troca de nomes em si (`Core de Pagamentos`, `Parceiro de Lançamentos`,
+`Cadastro de Ofertas`, `emp-NNNN`) e a exigência de dados fictícios em toda carga de exemplo.
+
+**O que foi RECUSADO — manter a regra da operação real, apenas com nomes trocados.** Razão técnica:
+o que identifica a operação não é o nome do sistema, é a própria regra — a sequência de passos, os
+pontos de decisão e a calibragem dos limites. Nome trocado sobre regra intacta é anonimização
+aparente. A saída foi **substituir por uma regra mais simples, com menos passos**: franquia, faixa e
+teto, três verificações em sequência, no lugar do fluxo original. O recorte mais curto preserva o
+que o enunciado avalia — decisão sobre estado acumulado, que aprova, limita e recusa — e descarta o
+que pertence à empresa; e, de quebra, é defensável na apresentação e implementável no prazo.
+
+---
+
+#### 12. Compensação onde bastava resiliência
+
+**O que foi pedido.** Propor o caminho de exceção com compensação exigido pelo terceiro critério do
+domínio.
+
+**O que a ferramenta sugeriu.** Compensar quando o débito no Parceiro de Lançamentos falhasse:
+desfazer o efeito local e devolver a franquia consumida.
+
+**O que foi aceito.** Nada dessa proposta. O gatilho adotado foi outro: recusa do Faturamento por
+**contrato de tarifação inativo na competência**.
+
+**O que foi RECUSADO — compensar por indisponibilidade do parceiro.** Razão técnica: indisponibilidade
+se resolve com **retry com backoff e DLQ**, não com compensação — repetir muda o resultado, e onde
+repetir resolve não há saga. Essa fronteira é **regra do domínio**, não escolha de implementação, e
+está declarada no ADR-002: recusa por contrato inativo é definitiva, repetir não muda o resultado, o
+que a distingue da indisponibilidade do parceiro, que é retry e DLQ. É também onde aparece a
+**vantagem do assíncrono**: o fato permanece no tópico, o offset não avança, o consumidor tenta de
+novo quando o parceiro voltar, e nada precisa ser desfeito. Num fluxo síncrono a falha do parceiro
+derrubaria a operação e exigiria desfazer o que já tinha sido feito; no assíncrono ela vira espera.
+Modelar compensação para esse caso importaria para a arquitetura orientada a eventos um problema que
+ela já resolve, e produziria uma saga disparada por falha de infraestrutura — confundindo recuperação
+de falha com regra de negócio.
+
+---
+
+#### 13. Devolução de Pix apresentada como transação compensatória
+
+**O que foi pedido.** Revisar a ADR contra os quatro critérios da Parte A e apontar o que faltava.
+
+**O que a ferramenta sugeriu.** Por conta própria, ao apontar que o critério de compensação estava
+em aberto, ofereceu a **devolução do Pix** (devolução comum ou MED) como o caminho de compensação do
+domínio: Pix devolvido, tarifa estornada. A devolução não estava no recorte proposto pela equipe —
+entrou na conversa pela ferramenta.
+
+**O que foi aceito.** O reconhecimento de que a devolução existe no domínio e precisa de tratamento —
+registrada nas Consequências aceitas do ADR-002 como fato de negócio posterior, com processo próprio,
+fora do escopo desta etapa.
+
+**O que foi RECUSADO — classificá-la como compensação de saga.** Razão técnica: transação
+compensatória desfaz uma etapa já commitada quando uma etapa **posterior da mesma saga** falha. A
+devolução não tem nenhuma dessas propriedades: chega dias depois (no MED, até 80), sobre uma saga que
+**terminou com sucesso**, e é disparada por um fato novo, não por falha de etapa — não há instância
+de saga aberta esperando por ela. É um estorno: operação de negócio de primeira classe, caminho feliz
+de outro processo. Some-se a razão de escopo: modelar a devolução acrescentaria um fluxo inteiro —
+janela do MED, disputa, reversão no parceiro — **sem ganho para o que este exercício avalia**, já que
+o caminho de compensação já está coberto pela recusa por contrato inativo. Por isso foi
+desconsiderada neste momento.

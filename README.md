@@ -13,9 +13,9 @@ Equipe 02 · líder: **Evandro V. Junior**
 | Allainn Christiam | 254337 | consumidor de tarifação, infraestrutura, teste de idempotência |
 | Amanda Bouzan | 255369 | publicador do evento de Pix realizado |
 | Alexsander da Silva | 254779 | testes automatizados adicionais do consumidor |
-| _(a preencher)_ | | |
-| _(a preencher)_ | | |
-| _(a preencher)_ | | |
+| Guilherme Henrique Jeske | 1665116 | |
+| Jhonathan Carvo | 1668518 | |
+| Samuel Machado de Lima | 1215716 | |
 
 <!--
 PENDENTE — para a equipe conferir antes da entrega:

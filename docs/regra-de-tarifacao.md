@@ -108,7 +108,7 @@ R$6.000 produzem fatura de R$0,50 ou de R$10,00 conforme qual deles ficou isento
 reproduzível se a ordem de avaliação for estável.
 
 Ela é estável porque os eventos de uma empresa são consumidos na ordem em que foram publicados, e o
-replay do log reproduz exatamente a mesma sequência. **Isso depende de quatro condições, todas
+replay do log reproduz exatamente a mesma sequência. **Isso depende de cinco condições, todas
 obrigatórias:**
 
 1. **Chave de partição `idEmpresa`.** Todos os eventos de uma empresa na mesma partição, consumidos

@@ -67,6 +67,81 @@ mvn -f servico-pix/pom.xml test
 
 ---
 
+## Verificação manual
+
+Com a infraestrutura e os dois serviços no ar.
+
+### 1. Publicar um Pix
+
+```bash
+curl -i -X POST http://localhost:8080/pix/realizados \
+  -H "Content-Type: application/json" \
+  --data-binary @servico-pix/pix-exemplo.json
+```
+
+No PowerShell, use `curl.exe` com o `.exe` — `curl` puro é apelido de `Invoke-WebRequest` e não
+entende `-X` nem `--data-binary`.
+
+Esperado: **202 Accepted**. A mensagem aparece na Kafka UI (http://localhost:8081), no tópico
+`pagamentos.pix.realizado.v1`, com os cabeçalhos `ce_specversion`, `ce_id`, `ce_source`, `ce_type` e
+`ce_time` — é por aqui que se confere o item 3 do checklist, e o item 4 (nenhuma data em epoch).
+
+### 2. O mesmo evento entregue 3× produz efeito 1× — item 5 do checklist
+
+O `eventoId` é **opcional** no request: informado, ele vira a identidade do fato (o `ce_id`), e o
+mesmo POST repetido publica o mesmo evento. Sem informá-lo, o serviço gera um UUID por chamada e
+cada POST seria um fato novo — a deduplicação não seria exercitada.
+
+Rode **três vezes** o mesmo comando:
+
+```bash
+curl -s -o /dev/null -w "HTTP %{http_code}\n" \
+  -X POST http://localhost:8080/pix/realizados \
+  -H "Content-Type: application/json" \
+  -d '{"eventoId":"demo-dedup-001","idTransacaoPix":"pix-dedup","idEmpresa":"emp-0002","valor":700.00}'
+```
+
+Confira o efeito:
+
+```bash
+docker exec e02-postgres psql -U tarifacao -d tarifacao \
+  -c "SELECT evento_id, id_transacao_pix, situacao, valor FROM tarifa WHERE evento_id='demo-dedup-001';"
+```
+
+Esperado: **uma única linha**, e no log do consumidor um `pix processado` seguido de dois
+`evento demo-dedup-001 JA PROCESSADO, descartando em silencio`.
+
+### 3. As cinco saídas da política
+
+| Empresa | Comando | Esperado |
+|---|---|---|
+| `emp-0001` | 12 Pix de R$ 100 | 10 × `FRANQUIA`, 2 × `FAIXA` (R$ 0,50) |
+| `emp-0006` | 4 Pix de R$ 9.000 | `FAIXA`, `FAIXA`, `TETO_PARCIAL` (R$ 5,00), `TETO_ATINGIDO` |
+| `emp-9999` | 1 Pix qualquer | `SEM_CONTRATO`, valor 0,00 — empresa sem contrato não é cobrada |
+
+### Atalho opcional
+
+Os scripts em [`scripts/`](../../scripts/) automatizam os casos acima, com a mesma interface nos dois
+sistemas — [`publicar-pix.sh`](../../scripts/publicar-pix.sh) e
+[`publicar-pix.ps1`](../../scripts/publicar-pix.ps1):
+
+```bash
+./scripts/publicar-pix.sh -n 11              # onze Pix: a franquia acaba no 11º
+./scripts/publicar-pix.sh --roteiro          # as cinco saídas da política
+./scripts/publicar-pix.sh --idempotencia     # o mesmo evento 3× → efeito 1×
+./scripts/publicar-pix.sh --conferir         # só mostra a tabela tarifa
+```
+
+```powershell
+.\scripts\publicar-pix.ps1 -Quantidade 11
+.\scripts\publicar-pix.ps1 -Roteiro
+```
+
+São conveniência, não o caminho oficial: os comandos `curl` acima resolvem tudo e não dependem de
+nada além do que já está instalado.
+
+---
+
 ## Testes automatizados — o que cada um cobre
 
 O arquivo de testes é
