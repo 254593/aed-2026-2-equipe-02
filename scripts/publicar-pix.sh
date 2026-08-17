@@ -118,10 +118,16 @@ idempotencia() {
   corpo=$(sed "s/\"eventoId\":  *\"[^\"]*\"/\"eventoId\": \"$evento_id\"/" "$carga" \
           | tr -d '\n' | tr -s ' ')
 
+  # A empresa vem da carga, nao de um literal — e o que o publicar-pix.ps1 ja
+  # faz. Literal aqui sairia do lugar no dia em que a carga mudasse, e a
+  # mensagem iria para a particao de uma empresa e o corpo para outra.
+  local empresa
+  empresa=$(sed -n 's/.*"idEmpresa": *"\([^"]*\)".*/\1/p' "$carga")
+
   titulo "Idempotencia — o MESMO evento entregue $ENTREGAS vezes"
   echo "  ce_id / eventoId : $evento_id"
   echo "  topico           : $TOPICO"
-  echo "  chave de particao: emp-0001  (idEmpresa)"
+  echo "  chave de particao: $empresa  (idEmpresa)"
 
   local antes
   antes=$(docker exec "$CONTAINER_KAFKA" true 2>/dev/null && echo ok || echo falhou)
@@ -132,7 +138,7 @@ idempotencia() {
   local cabecalhos="ce_specversion=1.0;ce_id=$evento_id;ce_source=$ORIGEM;ce_type=$TOPICO;ce_time=2026-08-14T13:00:00.000Z"
 
   for i in $(seq 1 "$ENTREGAS"); do
-    printf '%s#emp-0001~%s\n' "$cabecalhos" "$corpo" \
+    printf '%s#%s~%s\n' "$cabecalhos" "$empresa" "$corpo" \
       | docker exec -i "$CONTAINER_KAFKA" /opt/kafka/bin/kafka-console-producer.sh \
           --bootstrap-server kafka:9094 --topic "$TOPICO" \
           --property parse.headers=true --property headers.delimiter='#' \

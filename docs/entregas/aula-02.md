@@ -121,16 +121,24 @@ Esperado: **uma única linha**, e no log do consumidor um `pix processado` segui
 
 ### Atalho opcional
 
-[`servico-pix/novo-pix.ps1`](../../servico-pix/novo-pix.ps1) automatiza os casos acima:
+Os scripts em [`scripts/`](../../scripts/) automatizam os casos acima, com a mesma interface nos dois
+sistemas — [`publicar-pix.sh`](../../scripts/publicar-pix.sh) e
+[`publicar-pix.ps1`](../../scripts/publicar-pix.ps1):
 
-```powershell
-pwsh ./servico-pix/novo-pix.ps1 -Quantidade 12 -IdEmpresa emp-0001
-pwsh ./servico-pix/novo-pix.ps1 -EventoId demo-dedup-001 -Vezes 3 -IdEmpresa emp-0002
-pwsh ./servico-pix/novo-pix.ps1 -IdEmpresa emp-0006 -Valor 9000 -Quantidade 4
+```bash
+./scripts/publicar-pix.sh -n 11              # onze Pix: a franquia acaba no 11º
+./scripts/publicar-pix.sh --roteiro          # as cinco saídas da política
+./scripts/publicar-pix.sh --idempotencia     # o mesmo evento 3× → efeito 1×
+./scripts/publicar-pix.sh --conferir         # só mostra a tabela tarifa
 ```
 
-É conveniência, não o caminho oficial: em macOS e Linux exige `pwsh` instalado. Sem ele, os comandos
-acima resolvem tudo.
+```powershell
+.\scripts\publicar-pix.ps1 -Quantidade 11
+.\scripts\publicar-pix.ps1 -Roteiro
+```
+
+São conveniência, não o caminho oficial: os comandos `curl` acima resolvem tudo e não dependem de
+nada além do que já está instalado.
 
 ---
 

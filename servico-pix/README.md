@@ -51,13 +51,13 @@ o comando acima veria Pix reais sendo descartados como reentrega.
 
 ## Gerar carga (opcional)
 
-```powershell
-pwsh ./servico-pix/novo-pix.ps1 -Quantidade 12 -IdEmpresa emp-0001
-pwsh ./servico-pix/novo-pix.ps1 -EventoId demo-dedup-001 -Vezes 3 -IdEmpresa emp-0002
+```bash
+./scripts/publicar-pix.sh -n 11              # onze Pix: a franquia acaba no 11º
+./scripts/publicar-pix.sh --idempotencia     # o mesmo evento 3x -> efeito 1x
 ```
 
-Em macOS e Linux exige `pwsh` instalado; sem ele, use os comandos de
-[docs/entregas/aula-02.md](../docs/entregas/aula-02.md), que cobrem os mesmos casos.
+No Windows, `scripts\publicar-pix.ps1` tem os mesmos parâmetros. Os comandos `curl` de
+[docs/entregas/aula-02.md](../docs/entregas/aula-02.md) cobrem os mesmos casos sem script nenhum.
 
 ## Contrato publicado
 
