@@ -14,7 +14,7 @@ Equipe 02 · líder: **Evandro V. Junior**
 | Amanda Bouzan | 255369 | publicador do evento de Pix realizado |
 | Alexsander da Silva | 254779 | testes automatizados adicionais do consumidor |
 | Guilherme Henrique Jeske | 1665116 | |
-| Jhonathan Carvo | 1668518 | |
+| Jhonathan Carvo | 2582390 | documentação e revisão  do projeto |
 | Samuel Machado de Lima | 1215716 | |
 
 <!--
@@ -35,6 +35,7 @@ PENDENTE — para a equipe conferir antes da entrega:
      interacoes com ao menos uma recusa justificada POR INTEGRANTE.
 -->
 
+
 ## O domínio em uma frase
 
 Tarifação de Pix de contas PJ: cada Pix liquidado é confrontado com a oferta comercial vigente da
@@ -43,6 +44,71 @@ excedente — e empresa sem contrato vigente não é cobrada.
 
 O processo completo, os quatro critérios e as consequências aceitas estão em
 [docs/adr/ADR-002-dominio-do-projeto.md](docs/adr/ADR-002-dominio-do-projeto.md).
+
+## Quick start
+
+1. Suba a infraestrutura:
+   ```bash
+   docker compose up -d
+   ```
+2. Rode o consumidor:
+   ```bash
+   mvn -f servico-tarifacao/pom.xml spring-boot:run
+   ```
+3. Rode o publicador em outra aba:
+   ```bash
+   mvn -f servico-pix/pom.xml spring-boot:run
+   ```
+4. Envie um Pix de exemplo:
+   ```bash
+   curl.exe -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:8080/pix/realizados \
+        -H "Content-Type: application/json" -d "@servico-pix/pix-exemplo.json"
+   ```
+
+## Troubleshooting
+
+- Se o Kafka ainda não estiver pronto, o consumidor pode mostrar `UNKNOWN_TOPIC_OR_PARTITION` por alguns segundos; normalmente resolve sozinho.
+- Se a porta `8080` estiver ocupada, ajuste a configuração do `server.port` em [servico-pix/src/main/resources/application.yml](servico-pix/src/main/resources/application.yml).
+- Se o Docker não subir, confirme que o daemon está rodando com `docker ps`.
+- Se o `curl` no PowerShell falhar, use `curl.exe` e não o alias do PowerShell.
+
+## Fluxo do sistema
+
+```text
+POST /pix/realizados
+        ↓
+servico-pix
+        ↓
+publica evento no Kafka
+        ↓
+servico-tarifacao
+        ↓
+valida idempotência e aplica regra de tarifação
+        ↓
+grava linha em tarifa no PostgreSQL
+```
+
+Em resumo: o publicador recebe a requisição HTTP, gera o evento CloudEvents, publica no tópico Kafka e retorna `202 Accepted`. O consumidor lê esse evento, descarta reentregas via `eventoId`/`ce_id` e calcula a tarifa conforme a franquia, teto e oferta vigente.
+
+## Contrato do evento
+
+O publicador envia um objeto `RealizacaoPixVO` com os campos essenciais:
+
+- `idTransacaoPix` — obrigatório
+- `idEmpresa` — obrigatório
+- `valor` — obrigatório e maior que zero
+- `chavePix`, `tipoChave`, `bancoDestino`, `endToEndId`, `pagadorNome` — opcionais, mas importantes para o rastreio do evento
+- `eventoId` — opcional; se informado, vira a identidade do fato e garante idempotência
+
+O evento publicado no Kafka tem cabeçalhos CloudEvents:
+
+- `ce_specversion`
+- `ce_id`
+- `ce_source`
+- `ce_type`
+- `ce_time`
+
+A regra mais importante é esta: repetir o mesmo `POST` com o mesmo `eventoId` deve produzir efeito único. Isso evita cobrança duplicada por retry.
 
 ---
 

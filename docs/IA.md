@@ -220,6 +220,26 @@ especificação, não do código, e foram escritos para falhar antes de passar.
 
 ---
 
+## Aula 02
+
+### Jhonathan Carvo (2582390) — documentação e revisão do projeto
+
+Ferramenta: GitHub Copilot. Interação em 16/08/2026.
+
+#### 1. Revisão de documentação e clareza de execução
+
+**Pedido.** Melhorar a legibilidade do README principal para facilitar a execução e a compreensão do projeto sem precisar ler o código inteiro.
+
+**Sugerido.** A ferramenta propôs organização por quick start, troubleshooting, fluxo do sistema e resumo do contrato do evento Kafka.
+
+**Aceito.** A estrutura simplificada, os passos de execução rápida e a explicação do contrato do evento.
+
+**Resultado.** O README ficou mais acessível para onboarding, revisão e apresentação final, preservando o comportamento do sistema intacto.
+
+---
+
+---
+
 #### 8. A recusa da interação 7, revertida — e por que a reversão também é uma decisão
 
 **Pedido** (16/08). Sincronizar os campos entre consumidor, publicador e documentos, adotando em
