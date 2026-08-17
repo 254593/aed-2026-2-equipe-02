@@ -23,3 +23,9 @@ desktop.ini
 # Logs e temporarios
 *.log
 *.tmp
+
+# Documento de identificacao da equipe: e o UNICO artefato do Canvas, e o
+# enunciado (secao 2.1) e explicito em que nada alem dele sobe la — e que todo
+# artefato avaliado vive no repositorio. Manter aqui duplicaria no repo o que
+# ja esta no README, criando duas fontes para a mesma informacao.
+documento-identificacao-canvas.md
