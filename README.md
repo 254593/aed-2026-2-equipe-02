@@ -11,7 +11,7 @@ Equipe 02 · líder: **Evandro V. Junior**
 |---|---|---|
 | Evandro V. Junior | 254593 | líder · ADR-002 e decisão do domínio |
 | Allainn Christiam | 254337 | consumidor de tarifação, infraestrutura, teste de idempotência |
-| Amanda Bouzan | 1665626 | publicador do evento de Pix realizado |
+| Amanda Bouzan | 255369 | publicador do evento de Pix realizado |
 | Alexsander da Silva | 254779 | testes automatizados adicionais do consumidor |
 | _(a preencher)_ | | |
 | _(a preencher)_ | | |
