@@ -14,7 +14,7 @@ Equipe 02 · líder: **Evandro V. Junior**
 | Amanda Bouzan | 255369 | publicador do evento de Pix realizado |
 | Alexsander da Silva | 254779 | testes automatizados adicionais do consumidor |
 | Guilherme Henrique Jeske | 1665116 | |
-| Jhonathan Carvo | 2582390 | documentação e revisão  do projeto |
+| Jhonathan Carvo | 258239| documentação e revisão  do projeto |
 | Samuel Machado de Lima | 1215716 | |
 
 <!--
