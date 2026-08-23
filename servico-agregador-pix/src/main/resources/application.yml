@@ -1,0 +1,26 @@
+pix:
+  topico: pagamentos.pix.realizado.v1
+  agregador:
+    group-id: agregador-pix-por-hora
+
+spring:
+  application:
+    name: servico-agregador-pix
+  kafka:
+    bootstrap-servers: localhost:19092
+    consumer:
+      group-id: ${pix.agregador.group-id}
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.type.mapping: br.pucminas.aed.agregador.domain.PixRealizadoEvent:br.pucminas.aed.agregador.domain.PixRealizadoEvent
+
+server:
+  port: 8081
+
+logging:
+  level:
+    root: WARN
+    br.pucminas.aed: INFO
+    org.springframework.boot: INFO
+  pattern:
+    console: "%d{HH:mm:ss} %-5level %-28logger{0} : %msg%n"

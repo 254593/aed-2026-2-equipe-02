@@ -51,19 +51,32 @@ O processo completo, os quatro critérios e as consequências aceitas estão em
    ```bash
    docker compose up -d
    ```
-2. Rode o consumidor:
+2. Rode o consumidor de tarifação (etapa 2):
    ```bash
    mvn -f servico-tarifacao/pom.xml spring-boot:run
    ```
-3. Rode o publicador em outra aba:
+3. Rode o agregador de Pix por hora (etapa 3, em outra aba):
+   ```bash
+   mvn -f servico-agregador-pix/pom.xml spring-boot:run
+   ```
+4. Rode o publicador em outra aba:
    ```bash
    mvn -f servico-pix/pom.xml spring-boot:run
    ```
-4. Envie um Pix de exemplo:
+5. Envie um Pix de exemplo:
    ```bash
    curl.exe -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:8080/pix/realizados \
         -H "Content-Type: application/json" -d "@servico-pix/pix-exemplo.json"
    ```
+
+## Agregador: quanto foi liquidado por hora
+
+O `servico-agregador-pix` (etapa 3) consome do mesmo tópico que a tarifação, mas com um grupo de consumidores próprio (`agregador-pix-por-hora`). Agrega Pix liquidados por hora e responde: **"Quanto foi liquidado em Pix por hora?"**
+
+- **Relógio:** event time (hora de ocorrência da transação, não chegada)
+- **Janela:** 1 hora, alinhada por tempo UTC
+- **Saída:** logs com agregação por hora
+- **Reproduzibilidade:** garantida — reprocessar sempre dá o mesmo resultado
 
 ## Troubleshooting
 

@@ -148,7 +148,70 @@ valor zero, não inventar um contrato que ninguém assinou.
 sobre não haver fallback e deixar o código como estava. Recusada porque aquela frase é a regra que
 sustenta o recorte do domínio; removê-la para acomodar uma implementação apressada é escolher o
 domínio de trás para a frente, exatamente o que o enunciado adverte na Parte A.
+---
 
+## Aula 03
+
+### Jhonathan Carvo (258239) — documentação e agregador
+
+Ferramenta: Claude Haiku 4.5 (GitHub Copilot). Interações de 23/08/2026.
+
+---
+
+#### 1. Escolha do relógio para a agregação: event time vs processing time
+
+**Pedido.** Definir qual relógio usar na agregação de Pix por hora: o instante da liquidação (`liquidadoEm` do evento) ou o momento do processamento (hora do consumidor)?
+
+**Sugerido.** Apresentadas ambas as opções com trade-offs:
+- **Processing time:** mais simples de implementar, latência mínima (evento aparece na agregação quase instantaneamente)
+- **Event time:** mais complexo, mas garante reproduzibilidade (se reprocessar, o resultado é idêntico) e reflete a realidade do domínio
+
+**Aceito.** Event time (`liquidadoEm`). Razão: em um contexto de tarifação e faturamento, a precisão sobre *quando realmente aconteceu* é mais importante que a latência de *quando ficamos sabendo*. Uma transação liquidada às 14:00 UTC deve contar para o faturamento das 14:00–15:00, mesmo que chegue com atraso.
+
+**RECUSADO — processing time.** Razão de negócio: usar a hora do processador como realidade violaria o contrato do faturamento. A fatura de um cliente deve refletir as transações que *realmente ocorreram* naquele dia, não as que *o sistema conheceu naquele dia*. Rede lenta, reprocessamento ou até uma semana de downtime não podem mudar retroativamente a fatura de ontem. A consequência aceita é que a agregação pode ter latência — o que é aceitável e até desejável em um sistema contábil.
+
+---
+
+#### 2. Implementação usando Kafka Streams vs agregação manual
+
+**Pedido.** Como implementar a agregação por hora com qualidade de produção?
+
+**Sugerido.** Duas caminhos:
+- **Kafka Streams:** framework específico para streaming, com janelas alinhadas, state store, watermark automático
+- **Agregação manual em memória:** implementada no listener, mais simples para prototipagem, mas sem persistência
+
+**Aceito.** Agregação manual em memória **como prototipagem para demonstrar o conceito**. Mantém o foco no entendimento da janela alinhada por tempo e da diferença entre relógios, sem a complexidade adicional do framework.
+
+**Recusado — Kafka Streams como entrega.** Razão técnica: o enunciado não pede Kafka Streams, e implementá-lo aqui adicionaria dependências, configuração de RocksDB e state store sem agregação adicional de conhecimento *desta etapa*. O desafio (opcional) da Aula 03 oferece Kafka Streams como bônus para quem quiser. A implementação manual **deixa visível** a mecânica de alinhamento de janela, que é o que a avaliação pede.
+
+**Nota implementada:** comentários no código de produção deixam clara a rota para produção (persistência em RocksDB, watermark, rebalanceamento), diferenciando este protótipo do que seria necessário em produção.
+
+---
+
+#### 3. Significado de cada campo do contrato: evitar ambiguidade
+
+**Pedido.** Documentar o contrato do evento com campos, tipos e obrigatoriedade.
+
+**Sugerido.** Tabela padrão: campo, tipo, obrigatório/opcional. Conciso, suficiente.
+
+**Aceito.** Tabela com campos, tipos, obrigatoriedade **e SIGNIFICADO em frase**, como o enunciado destaca. Aditivamente: nota sobre mudanças perigosas (exemplo: se `valor` começar a incluir frete, o esquema aceita, mas o contrato foi violado).
+
+**Recusado — significado como uma palavra.** Razão de comunicação: `valor: "O valor do Pix"` não esclarece: é o valor líquido? Inclui tarifa? E depois? A frase completa *"Valor monetário do Pix em reais; pode ser omitido em cenários específicos, mas quando presente é essencial para o cálculo de tarifa"* deixa claro o escopo e a consequência de ausência. Essa é exatamente a mudança de contrato disfarçada de mudança de implementação que o enunciado exemplifica.
+
+---
+
+#### 4. Pergunta de negócio para a agregação
+
+**Pedido.** Qual pergunta a agregação deveria responder?
+
+**Sugerido.** Três opções:
+- "Quantos Pix liquidados por hora?" (simples, responde infraestrutura)
+- "Quanto foi liquidado em reais por hora?" (alinha com receita e faturamento)
+- "Qual a média de Pix por hora?" (análise de padrão)
+
+**Aceito.** "Quanto foi liquidado em Pix por hora?" (segunda opção). Razão de negócio: responde a uma pergunta que alguém do faturamento faria: *"Qual foi meu volume de receita a cada hora?"* É informação que alimenta diretamente o sistema de tarifação e faturamento.
+
+**Recusado — "Quantos eventos por minuto."** Razão: é métrica de infraestrutura, não de negócio. Responde-se com processing time sem pensar, e não exercita a escolha do relógio, que é o ponto central da aula.
 **Aceito.** Alinhar o código ao ADR, e não o contrário:
 
 - `SEM_CONTRATO` como quarta saída da política, com valor zero e **sem consumir franquia**;
