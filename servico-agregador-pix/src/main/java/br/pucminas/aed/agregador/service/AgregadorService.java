@@ -39,7 +39,7 @@ import br.pucminas.aed.agregador.domain.PixRealizadoEvent;
  *    perderia atualizacoes. compute faz os tres sob o lock do bucket.
  *
  * 4. DEDUPLICACAO POR eventoId: um Pix nao pode ser contado duas vezes, mesmo se
- *    reenentregue. Um Set de eventoId garante isso. Custo em memoria proporcional
+ *    reentregue. Um Set de eventoId garante isso. Custo em memoria proporcional
  *    ao volume do dia, que zera no reinicio — coerente com o estado em memoria.
  *    Isso mantem o mesmo principio de idempotencia da etapa anterior (tarifacao).
  *
@@ -54,7 +54,7 @@ public class AgregadorService {
     private final Map<Instant, AgregacaoPorHoraVO> janelas = new ConcurrentHashMap<Instant, AgregacaoPorHoraVO>();
     
     /**
-     * Set de deduplicacao: rastreia quais eventold ja foram agregados.
+     * Set de deduplicacao: rastreia quais eventoId ja foram agregados.
      * Garante idempotencia: o mesmo Pix (mesmo eventoId) e agregado apenas uma vez,
      * mesmo que reentregue multiplas vezes.
      */

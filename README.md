@@ -84,6 +84,7 @@ mvn -f servico-agregador-pix/pom.xml spring-boot:run
 | Relógio | **event time** (`liquidadoEm` do evento), não a hora de chegada |
 | Janela | 1 hora, alinhada em UTC, fim exclusivo |
 | Retardatário | somado na janela dele; nenhum evento é descartado |
+| Reentrega | ignorada por `eventoId` — um Pix entregue 3× soma uma vez |
 | Reprocessamento | resultado idêntico |
 | Saída | log, com a janela atualizada, partição e offset |
 

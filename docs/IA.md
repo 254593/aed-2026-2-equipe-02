@@ -462,7 +462,7 @@ Ferramenta: Claude Haiku 4.5 (GitHub Copilot). Interações de 23/08/2026.
 
 #### 5. Idempotência do agregador: deduplicar por `eventoId`
 
-**Pedido.** O agregador soma Pix reenentregues (R$ 150 x 3 entregas = R$ 450). O enunciado não pede explicitamente idempotência. Manter como está ou implementar?
+**Pedido.** O agregador soma Pix reentregues (R$ 150 x 3 entregas = R$ 450). O enunciado não pede explicitamente idempotência. Manter como está ou implementar?
 
 **Sugerido.** Três caminhos:
 1. Deduplicar por `eventoId` (Set em memória) — **recomendado**
@@ -471,7 +471,7 @@ Ferramenta: Claude Haiku 4.5 (GitHub Copilot). Interações de 23/08/2026.
 
 **Aceito.** Opção 3: **Deduplicar e documentar.** Razão de coerência: a etapa anterior (`servico-tarifacao`) deduplica por `eventoId` para não cobrar 2x. O agregador deve manter o **mesmo princípio**: contar Pix únicos, não entregas.
 
-A métrica "quanto foi liquidado" é pergunta de negócio que alimenta faturamento. Faturar R$ 450 por um Pix de R$ 150 reenentregue invalidaria a métrica — é pior descartar a reentrega sem avisar. O Set de `eventosAgregados` garante idempotência com custo de memória proporcional ao volume diário.
+A métrica "quanto foi liquidado" é pergunta de negócio que alimenta faturamento. Faturar R$ 450 por um Pix de R$ 150 reentregue invalidaria a métrica — é pior descartar a reentrega sem avisar. O Set de `eventosAgregados` garante idempotência com custo de memória proporcional ao volume diário.
 
 **RECUSADO — opção 2, deixar errado e documentar.** Razão técnica: O slide específico do professor (**"O agregador soma reentregas"**) é proposital — é para a equipe reconhecer o defeito e corrigi-lo, exatamente como fizemos com a `SituacaoDaTarifa` na etapa 2 (quando o código contradisse o ADR). Aceitar silenciosamente o número errado é incompatível com "decisão de verdade" que o enunciado pede.
 

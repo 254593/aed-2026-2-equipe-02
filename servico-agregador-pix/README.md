@@ -142,7 +142,7 @@ partição inteira.
 mvn -f servico-agregador-pix/pom.xml test
 ```
 
-**12 testes**, sem Docker (Kafka embutido). Os de integração publicam **JSON cru**, como o
+**13 testes**, sem Docker (Kafka embutido). Os de integração publicam **JSON cru**, como o
 `servico-pix` publica — publicar objeto Java provaria que o serviço funciona com um produtor que
 não existe.
 
@@ -150,9 +150,23 @@ não existe.
 |---|---|
 | 1 | desserializa o JSON do produtor real, sem cabeçalho de tipo |
 | 2 | Pix da mesma hora somam na mesma janela |
-| 3 | horas diferentes ficam em janelas separadas |
-| 4 | **o retardatário soma na janela dele, sem reiniciar a contagem** |
-| 5 | campos não declarados são ignorados |
-| 6 | **usa event time**: três Pix que chegam juntos, liquidados em horas distintas, viram três janelas |
+| 3 | **reentrega do mesmo `eventoId` não altera a agregação** |
+| 4 | horas diferentes ficam em janelas separadas |
+| 5 | **o retardatário soma na janela dele, sem reiniciar a contagem** |
+| 6 | campos não declarados são ignorados |
+| 7 | **usa event time**: três Pix que chegam juntos, liquidados em horas distintas, viram três janelas |
 | `JanelaDeHoraVOTest` | alinhamento na hora cheia, fim exclusivo, cálculo determinístico |
 | `AgregacaoPorHoraVOTest` | imutabilidade; valor nulo soma zero mas conta como Pix |
+
+### Verificado de ponta a ponta
+
+Com um consumidor por grupo, publicando pelo `scripts/publicar-pix.sh --roteiro`:
+
+```
+tarifação: 23 efeitos + 2 reentregas descartadas = 25 mensagens
+agregador: 23 agregados + 2 reentregas ignoradas = 25 mensagens
+```
+
+Os dois chegam ao mesmo número de Pix reais por caminhos independentes — a tarifação pela tabela
+`evento_processado`, o agregador pelo `Set` de `eventoId`. E a janela do evento reentregue mostra
+**R$ 150,00 | 1 Pix**, não R$ 450,00 | 3 Pix.

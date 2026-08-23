@@ -53,8 +53,8 @@ chega. Para receita, chegar certo importa mais do que chegar rápido.
 Um Pix liquidado às 14:35 que só chega ao agregador às 15:50 entra na janela `[14:00, 15:00)`, que
 já tinha eventos. O total daquela hora **aumenta** — a janela não é recriada nem substituída.
 
-Se o mesmo Pix for reenentregue (mesmo `eventoId`), é ignorado na segunda passagem. Um Pix de R$ 150
-reenentregue 3 vezes soma R$ 150, não R$ 450. Isso garante que a métrica reflete o número **real**
+Se o mesmo Pix for reentregue (mesmo `eventoId`), é ignorado na segunda passagem. Um Pix de R$ 150
+reentregue 3 vezes soma R$ 150, não R$ 450. Isso garante que a métrica reflete o número **real**
 de Pix, não a quantidade de entregas do Kafka.
 
 O que torna isso possível é:
@@ -85,7 +85,12 @@ seção 7, e a decisão interessante lá é o que fazer com quem chega depois do
 
 A janela de cada evento é uma função pura do `liquidadoEm`, que viaja dentro do evento e é imutável.
 A soma é comutativa e associativa, então nem a ordem de chegada nem o particionamento alteram o
-total. Não há dependência de:
+total. **E a deduplicação por `eventoId` fecha o último furo:** mesmo que o tópico contenha cópias
+da mesma mensagem — o que at-least-once torna esperado, não excepcional —, cada Pix entra na conta
+uma vez só. Sem ela, o total seria *reproduzível mas errado*: releitura daria sempre o mesmo
+número, e esse número contaria entregas em vez de transações.
+
+Não há dependência de:
 
 - hora em que o agregador subiu;
 - hora em que a mensagem chegou ao broker;
@@ -133,7 +138,7 @@ conferir na mão qual mensagem entrou em qual janela:
 | Relógio | **event time** (`liquidadoEm`) |
 | Janela | 1 hora, alinhada em UTC, fim exclusivo |
 | Grupo | `agregador-pix-por-hora` — próprio, distinto de `tarifacao` |
-| Deduplicação | por `eventoId` — Pix único = uma soma, mesmo se reenentregue |
+| Deduplicação | por `eventoId` — Pix único = uma soma, mesmo se reentregue |
 | Retardatário | somado na janela dele; janela sem fechamento |
 | Reprocessamento | resultado idêntico |
 | Estado | em memória; o log é a fonte da verdade |
