@@ -51,6 +51,12 @@ public class AgregadorListener {
 
         AgregacaoPorHoraVO agregacao = agregadorService.registrar(evento);
 
+        // DEDUPLICACAO: se registrar retorna null, e porque este evento ja foi agregado
+        if (agregacao == null) {
+            log.debug("pix {} ja foi agregado; reentrega ignorada", evento.getEventoId());
+            return;
+        }
+
         // Particao e offset no log de proposito: e o que permite conferir na mao,
         // pelo kafka-console-consumer, que a mensagem daquele offset entrou nesta
         // janela — e nao em outra.

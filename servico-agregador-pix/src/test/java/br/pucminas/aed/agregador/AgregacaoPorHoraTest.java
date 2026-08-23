@@ -91,7 +91,19 @@ class AgregacaoPorHoraTest {
     }
 
     @Test
-    @DisplayName("3 - horas diferentes ficam em janelas separadas")
+    @DisplayName("3 - uma reentrega com o mesmo eventoId nao altera a agregacao")
+    void ignoraReentregaDoMesmoEvento() {
+        publicar("pix-a", "emp-0001", "100.00", "2026-08-23T14:10:00.000Z");
+        publicar("pix-b", "emp-0001", "150.00", "2026-08-23T14:20:00.000Z");
+        publicar("pix-c", "emp-0001", "200.00", "2026-08-23T14:30:00.000Z");
+        publicar("pix-b", "emp-0001", "150.00", "2026-08-23T14:20:00.000Z");
+
+        aguardarQuantidade(DENTRO_DAS_14, 3L);
+        assertThat(agregador.da(DENTRO_DAS_14).getValorTotal()).isEqualByComparingTo("450.00");
+    }
+
+    @Test
+    @DisplayName("4 - horas diferentes ficam em janelas separadas")
     void janelasNaoSeMisturam() {
         publicar("pix-201", "emp-0001", "100.00", "2026-08-23T14:10:00.000Z");
         publicar("pix-202", "emp-0001", "50.00", "2026-08-23T15:05:00.000Z");
@@ -103,7 +115,7 @@ class AgregacaoPorHoraTest {
     }
 
     @Test
-    @DisplayName("4 - o RETARDATARIO soma na janela dele, sem reiniciar a contagem")
+    @DisplayName("5 - o RETARDATARIO soma na janela dele, sem reiniciar a contagem")
     void retardatarioSomaNaJanelaCorreta() {
         // Este e o teste que a versao anterior nao passava: com uma janela
         // corrente unica, o evento de 14:30 chegando depois do de 15:05
@@ -122,7 +134,7 @@ class AgregacaoPorHoraTest {
     }
 
     @Test
-    @DisplayName("5 - campos que o agregador nao declara sao ignorados")
+    @DisplayName("6 - campos que o agregador nao declara sao ignorados")
     void consumidorTolerante() {
         // O JSON tem seis campos que esta classe nao declara. Se o consumidor
         // nao fosse tolerante, a desserializacao falharia e nada seria agregado
@@ -134,7 +146,7 @@ class AgregacaoPorHoraTest {
     }
 
     @Test
-    @DisplayName("6 - a agregacao usa o liquidadoEm do evento, nao a hora de chegada")
+    @DisplayName("7 - a agregacao usa o liquidadoEm do evento, nao a hora de chegada")
     void usaEventTimeNaoProcessingTime() {
         // Todos chegam AGORA, mas foram liquidados em horas distintas do passado.
         // Com processing time os tres cairiam na mesma janela: a de agora.

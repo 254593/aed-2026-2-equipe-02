@@ -48,12 +48,16 @@ chega. Para receita, chegar certo importa mais do que chegar rápido.
 
 ## 3. O que acontece com um evento atrasado
 
-**Ele é somado na janela do próprio `liquidadoEm`, e não na hora em que chegou.**
+**Ele é somado na janela do próprio `liquidadoEm`, e não na hora em que chegou. E, por deduplicação, apenas uma vez.**
 
 Um Pix liquidado às 14:35 que só chega ao agregador às 15:50 entra na janela `[14:00, 15:00)`, que
 já tinha eventos. O total daquela hora **aumenta** — a janela não é recriada nem substituída.
 
-O que torna isso possível é o agregador manter **um mapa de janelas**, e não uma janela corrente:
+Se o mesmo Pix for reenentregue (mesmo `eventoId`), é ignorado na segunda passagem. Um Pix de R$ 150
+reenentregue 3 vezes soma R$ 150, não R$ 450. Isso garante que a métrica reflete o número **real**
+de Pix, não a quantidade de entregas do Kafka.
+
+O que torna isso possível é:
 
 ```java
 janelas.compute(janela.getInicio(), (chave, atual) ->
@@ -129,6 +133,7 @@ conferir na mão qual mensagem entrou em qual janela:
 | Relógio | **event time** (`liquidadoEm`) |
 | Janela | 1 hora, alinhada em UTC, fim exclusivo |
 | Grupo | `agregador-pix-por-hora` — próprio, distinto de `tarifacao` |
+| Deduplicação | por `eventoId` — Pix único = uma soma, mesmo se reenentregue |
 | Retardatário | somado na janela dele; janela sem fechamento |
 | Reprocessamento | resultado idêntico |
 | Estado | em memória; o log é a fonte da verdade |

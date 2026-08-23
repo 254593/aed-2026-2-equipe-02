@@ -457,7 +457,25 @@ Ferramenta: Claude Haiku 4.5 (GitHub Copilot). Interações de 23/08/2026.
 **Aceito.** "Quanto foi liquidado em Pix por hora?" (segunda opção). Razão de negócio: responde a uma pergunta que alguém do faturamento faria: *"Qual foi meu volume de receita a cada hora?"* É informação que alimenta diretamente o sistema de tarifação e faturamento.
 
 **Recusado — "Quantos eventos por minuto."** Razão: é métrica de infraestrutura, não de negócio. Responde-se com processing time sem pensar, e não exercita a escolha do relógio, que é o ponto central da aula.
-**Aceito.** Alinhar o código ao ADR, e não o contrário:
+
+---
+
+#### 5. Idempotência do agregador: deduplicar por `eventoId`
+
+**Pedido.** O agregador soma Pix reenentregues (R$ 150 x 3 entregas = R$ 450). O enunciado não pede explicitamente idempotência. Manter como está ou implementar?
+
+**Sugerido.** Três caminhos:
+1. Deduplicar por `eventoId` (Set em memória) — **recomendado**
+2. Documentar como consequência aceita e deixar como está
+3. Deduplicar + documentar a decisão
+
+**Aceito.** Opção 3: **Deduplicar e documentar.** Razão de coerência: a etapa anterior (`servico-tarifacao`) deduplica por `eventoId` para não cobrar 2x. O agregador deve manter o **mesmo princípio**: contar Pix únicos, não entregas.
+
+A métrica "quanto foi liquidado" é pergunta de negócio que alimenta faturamento. Faturar R$ 450 por um Pix de R$ 150 reenentregue invalidaria a métrica — é pior descartar a reentrega sem avisar. O Set de `eventosAgregados` garante idempotência com custo de memória proporcional ao volume diário.
+
+**RECUSADO — opção 2, deixar errado e documentar.** Razão técnica: O slide específico do professor (**"O agregador soma reentregas"**) é proposital — é para a equipe reconhecer o defeito e corrigi-lo, exatamente como fizemos com a `SituacaoDaTarifa` na etapa 2 (quando o código contradisse o ADR). Aceitar silenciosamente o número errado é incompatível com "decisão de verdade" que o enunciado pede.
+
+---
 
 - `SEM_CONTRATO` como quarta saída da política, com valor zero e **sem consumir franquia**;
 - a coluna `situacao` em `tarifa`, porque três das quatro saídas valem `0.00` e significam coisas

@@ -3,6 +3,7 @@ package br.pucminas.aed.agregador.service;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -37,6 +38,11 @@ import br.pucminas.aed.agregador.domain.PixRealizadoEvent;
  *    subir mais de uma thread de consumo, e ler-somar-gravar em tres passos
  *    perderia atualizacoes. compute faz os tres sob o lock do bucket.
  *
+ * 4. DEDUPLICACAO POR eventoId: um Pix nao pode ser contado duas vezes, mesmo se
+ *    reenentregue. Um Set de eventoId garante isso. Custo em memoria proporcional
+ *    ao volume do dia, que zera no reinicio — coerente com o estado em memoria.
+ *    Isso mantem o mesmo principio de idempotencia da etapa anterior (tarifacao).
+ *
  * O estado e em memoria, e some no reinicio. E aceitavel porque o log e a fonte
  * da verdade: basta reprocessar o topico do inicio para reconstruir tudo — e,
  * por ser event time, reconstruir da o mesmo resultado. Persistir o estado seria
@@ -46,13 +52,28 @@ import br.pucminas.aed.agregador.domain.PixRealizadoEvent;
 public class AgregadorService {
 
     private final Map<Instant, AgregacaoPorHoraVO> janelas = new ConcurrentHashMap<Instant, AgregacaoPorHoraVO>();
+    
+    /**
+     * Set de deduplicacao: rastreia quais eventold ja foram agregados.
+     * Garante idempotencia: o mesmo Pix (mesmo eventoId) e agregado apenas uma vez,
+     * mesmo que reentregue multiplas vezes.
+     */
+    private final Set<String> eventosAgregados = ConcurrentHashMap.newKeySet();
 
     /**
      * Contabiliza um Pix na janela do proprio liquidadoEm.
      *
-     * @return a agregacao da janela DEPOIS de somar este Pix.
+     * DEDUPLICACAO: verifica se este evento ja foi agregado. Se sim, ignora a reentrega.
+     *
+     * @return a agregacao da janela DEPOIS de somar este Pix, ou null se foi reentrega.
      */
     public AgregacaoPorHoraVO registrar(PixRealizadoEvent evento) {
+        // DEDUPLICACAO: verifica se este evento ja foi agregado
+        if (!eventosAgregados.add(evento.getEventoId())) {
+            // Reentrega detectada: retorna null para o listener saber
+            return null;
+        }
+
         JanelaDeHoraVO janela = JanelaDeHoraVO.de(evento.getLiquidadoEm());
 
         return janelas.compute(janela.getInicio(), (chave, atual) -> {
@@ -76,5 +97,6 @@ public class AgregadorService {
     /** Usado pelos testes para partir de um estado limpo. */
     public void limpar() {
         janelas.clear();
+        eventosAgregados.clear();
     }
 }
