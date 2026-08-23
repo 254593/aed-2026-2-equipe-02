@@ -150,90 +150,6 @@ sustenta o recorte do domínio; removê-la para acomodar uma implementação apr
 domínio de trás para a frente, exatamente o que o enunciado adverte na Parte A.
 ---
 
-## Aula 03
-
-### Jhonathan Carvo (258239) — documentação e agregador
-
-Ferramenta: Claude Haiku 4.5 (GitHub Copilot). Interações de 23/08/2026.
-
----
-
-#### 1. Escolha do relógio para a agregação: event time vs processing time
-
-**Pedido.** Definir qual relógio usar na agregação de Pix por hora: o instante da liquidação (`liquidadoEm` do evento) ou o momento do processamento (hora do consumidor)?
-
-**Sugerido.** Apresentadas ambas as opções com trade-offs:
-- **Processing time:** mais simples de implementar, latência mínima (evento aparece na agregação quase instantaneamente)
-- **Event time:** mais complexo, mas garante reproduzibilidade (se reprocessar, o resultado é idêntico) e reflete a realidade do domínio
-
-**Aceito.** Event time (`liquidadoEm`). Razão: em um contexto de tarifação e faturamento, a precisão sobre *quando realmente aconteceu* é mais importante que a latência de *quando ficamos sabendo*. Uma transação liquidada às 14:00 UTC deve contar para o faturamento das 14:00–15:00, mesmo que chegue com atraso.
-
-**RECUSADO — processing time.** Razão de negócio: usar a hora do processador como realidade violaria o contrato do faturamento. A fatura de um cliente deve refletir as transações que *realmente ocorreram* naquele dia, não as que *o sistema conheceu naquele dia*. Rede lenta, reprocessamento ou até uma semana de downtime não podem mudar retroativamente a fatura de ontem. A consequência aceita é que a agregação pode ter latência — o que é aceitável e até desejável em um sistema contábil.
-
----
-
-#### 2. Implementação usando Kafka Streams vs agregação manual
-
-**Pedido.** Como implementar a agregação por hora com qualidade de produção?
-
-**Sugerido.** Duas caminhos:
-- **Kafka Streams:** framework específico para streaming, com janelas alinhadas, state store, watermark automático
-- **Agregação manual em memória:** implementada no listener, mais simples para prototipagem, mas sem persistência
-
-**Aceito.** Agregação manual em memória **como prototipagem para demonstrar o conceito**. Mantém o foco no entendimento da janela alinhada por tempo e da diferença entre relógios, sem a complexidade adicional do framework.
-
-**Recusado — Kafka Streams como entrega.** Razão técnica: o enunciado não pede Kafka Streams, e implementá-lo aqui adicionaria dependências, configuração de RocksDB e state store sem agregação adicional de conhecimento *desta etapa*. O desafio (opcional) da Aula 03 oferece Kafka Streams como bônus para quem quiser. A implementação manual **deixa visível** a mecânica de alinhamento de janela, que é o que a avaliação pede.
-
-**Nota implementada:** comentários no código de produção deixam clara a rota para produção (persistência em RocksDB, watermark, rebalanceamento), diferenciando este protótipo do que seria necessário em produção.
-
----
-
-#### 3. Significado de cada campo do contrato: evitar ambiguidade
-
-**Pedido.** Documentar o contrato do evento com campos, tipos e obrigatoriedade.
-
-**Sugerido.** Tabela padrão: campo, tipo, obrigatório/opcional. Conciso, suficiente.
-
-**Aceito.** Tabela com campos, tipos, obrigatoriedade **e SIGNIFICADO em frase**, como o enunciado destaca. Aditivamente: nota sobre mudanças perigosas (exemplo: se `valor` começar a incluir frete, o esquema aceita, mas o contrato foi violado).
-
-**Recusado — significado como uma palavra.** Razão de comunicação: `valor: "O valor do Pix"` não esclarece: é o valor líquido? Inclui tarifa? E depois? A frase completa *"Valor monetário do Pix em reais; pode ser omitido em cenários específicos, mas quando presente é essencial para o cálculo de tarifa"* deixa claro o escopo e a consequência de ausência. Essa é exatamente a mudança de contrato disfarçada de mudança de implementação que o enunciado exemplifica.
-
----
-
-#### 4. Pergunta de negócio para a agregação
-
-**Pedido.** Qual pergunta a agregação deveria responder?
-
-**Sugerido.** Três opções:
-- "Quantos Pix liquidados por hora?" (simples, responde infraestrutura)
-- "Quanto foi liquidado em reais por hora?" (alinha com receita e faturamento)
-- "Qual a média de Pix por hora?" (análise de padrão)
-
-**Aceito.** "Quanto foi liquidado em Pix por hora?" (segunda opção). Razão de negócio: responde a uma pergunta que alguém do faturamento faria: *"Qual foi meu volume de receita a cada hora?"* É informação que alimenta diretamente o sistema de tarifação e faturamento.
-
-**Recusado — "Quantos eventos por minuto."** Razão: é métrica de infraestrutura, não de negócio. Responde-se com processing time sem pensar, e não exercita a escolha do relógio, que é o ponto central da aula.
-**Aceito.** Alinhar o código ao ADR, e não o contrário:
-
-- `SEM_CONTRATO` como quarta saída da política, com valor zero e **sem consumir franquia**;
-- a coluna `situacao` em `tarifa`, porque três das quatro saídas valem `0.00` e significam coisas
-  diferentes — sem ela o extrato ficaria ambíguo justamente onde a auditoria precisa de clareza;
-- a oferta passou a ter **vigência**, e a busca é pela vigente *na competência do evento*. O ADR
-  diz "vigente" duas vezes, e sem isso um replay de agosto feito em outubro encontraria o contrato
-  errado — o fechamento mensal, que é o quarto critério do domínio, deixaria de ser reproduzível;
-- as outras duas saídas que o ADR declara e o código não tinha: **tarifação por faixa de valor** e
-  **teto mensal atingido**. É o "aprova, recusa e limita" do critério 1.
-
-**Efeito colateral, e ele importa.** Um teste automatizado já verde — o `emp-9999` recebendo
-R$ 1,90 no sexto Pix — estava *provando o comportamento errado*. Foi reescrito como
-`clienteSemContratoNaoECobrado`. Um teste que passa não é evidência de que a regra está certa: é
-evidência de que o código faz o que o teste diz, e aquele teste tinha sido escrito a partir do
-código, não a partir do ADR.
-
-*Onde isso aparece:* `SituacaoDaTarifaVO`, `DecisaoDeTarifacaoVO`, `FaixaDeTarifaVO`, o
-`buscarOfertaVigente` do repositório e os testes 7 a 11 do `IdempotenciaTest`.
-
----
-
 #### 7. Confrontar o código com a especificação da regra — dois defeitos que os testes não pegavam
 
 **Pedido** (15/08, ao receber de Evandro o `regra-de-tarifacao.md`). Comparar o consumidor com a
@@ -280,26 +196,6 @@ comportamento errado. Na interação 6 era o plano padrão; aqui eram o teto e a
 Nos dois casos o teste tinha sido escrito a partir do código, e não da regra — um teste derivado da
 implementação só prova que a implementação é ela mesma. Os testes 11, 12 e 13 nasceram da
 especificação, não do código, e foram escritos para falhar antes de passar.
-
----
-
-## Aula 02
-
-### Jhonathan Carvo (2582390) — documentação e revisão do projeto
-
-Ferramenta: GitHub Copilot. Interação em 16/08/2026.
-
-#### 1. Revisão de documentação e clareza de execução
-
-**Pedido.** Melhorar a legibilidade do README principal para facilitar a execução e a compreensão do projeto sem precisar ler o código inteiro.
-
-**Sugerido.** A ferramenta propôs organização por quick start, troubleshooting, fluxo do sistema e resumo do contrato do evento Kafka.
-
-**Aceito.** A estrutura simplificada, os passos de execução rápida e a explicação do contrato do evento.
-
-**Resultado.** O README ficou mais acessível para onboarding, revisão e apresentação final, preservando o comportamento do sistema intacto.
-
----
 
 ---
 
@@ -382,10 +278,23 @@ está correto para as entradas que ele vai receber de fato.
 
 ---
 
-<!--
-  Demais integrantes: acrescentem a sua subseção abaixo, no mesmo formato
-  (### Nome (matrícula) — parte pela qual respondeu).
--->
+### Jhonathan Carvo (2582390) — documentação e revisão do projeto
+
+Ferramenta: GitHub Copilot. Interação em 16/08/2026.
+
+#### 1. Revisão de documentação e clareza de execução
+
+**Pedido.** Melhorar a legibilidade do README principal para facilitar a execução e a compreensão do projeto sem precisar ler o código inteiro.
+
+**Sugerido.** A ferramenta propôs organização por quick start, troubleshooting, fluxo do sistema e resumo do contrato do evento Kafka.
+
+**Aceito.** A estrutura simplificada, os passos de execução rápida e a explicação do contrato do evento.
+
+**Resultado.** O README ficou mais acessível para onboarding, revisão e apresentação final, preservando o comportamento do sistema intacto.
+
+---
+
+---
 
 ### Evandro V. Junior (254593) — ADR-002, especificação da regra e idempotência do publisher
 
@@ -483,3 +392,212 @@ de outro processo. Some-se a razão de escopo: modelar a devolução acrescentar
 janela do MED, disputa, reversão no parceiro — **sem ganho para o que este exercício avalia**, já que
 o caminho de compensação já está coberto pela recusa por contrato inativo. Por isso foi
 desconsiderada neste momento.
+
+---
+
+## Aula 03
+
+### Jhonathan Carvo (2582390) — documentação e agregador
+
+Ferramenta: Claude Haiku 4.5 (GitHub Copilot). Interações de 23/08/2026.
+
+---
+
+#### 1. Escolha do relógio para a agregação: event time vs processing time
+
+**Pedido.** Definir qual relógio usar na agregação de Pix por hora: o instante da liquidação (`liquidadoEm` do evento) ou o momento do processamento (hora do consumidor)?
+
+**Sugerido.** Apresentadas ambas as opções com trade-offs:
+- **Processing time:** mais simples de implementar, latência mínima (evento aparece na agregação quase instantaneamente)
+- **Event time:** mais complexo, mas garante reproduzibilidade (se reprocessar, o resultado é idêntico) e reflete a realidade do domínio
+
+**Aceito.** Event time (`liquidadoEm`). Razão: em um contexto de tarifação e faturamento, a precisão sobre *quando realmente aconteceu* é mais importante que a latência de *quando ficamos sabendo*. Uma transação liquidada às 14:00 UTC deve contar para o faturamento das 14:00–15:00, mesmo que chegue com atraso.
+
+**RECUSADO — processing time.** Razão de negócio: usar a hora do processador como realidade violaria o contrato do faturamento. A fatura de um cliente deve refletir as transações que *realmente ocorreram* naquele dia, não as que *o sistema conheceu naquele dia*. Rede lenta, reprocessamento ou até uma semana de downtime não podem mudar retroativamente a fatura de ontem. A consequência aceita é que a agregação pode ter latência — o que é aceitável e até desejável em um sistema contábil.
+
+---
+
+#### 2. Implementação usando Kafka Streams vs agregação manual
+
+**Pedido.** Como implementar a agregação por hora com qualidade de produção?
+
+**Sugerido.** Duas caminhos:
+- **Kafka Streams:** framework específico para streaming, com janelas alinhadas, state store, watermark automático
+- **Agregação manual em memória:** implementada no listener, mais simples para prototipagem, mas sem persistência
+
+**Aceito.** Agregação manual em memória **como prototipagem para demonstrar o conceito**. Mantém o foco no entendimento da janela alinhada por tempo e da diferença entre relógios, sem a complexidade adicional do framework.
+
+**Recusado — Kafka Streams como entrega.** Razão técnica: o enunciado não pede Kafka Streams, e implementá-lo aqui adicionaria dependências, configuração de RocksDB e state store sem agregação adicional de conhecimento *desta etapa*. O desafio (opcional) da Aula 03 oferece Kafka Streams como bônus para quem quiser. A implementação manual **deixa visível** a mecânica de alinhamento de janela, que é o que a avaliação pede.
+
+**Nota implementada:** comentários no código de produção deixam clara a rota para produção (persistência em RocksDB, watermark, rebalanceamento), diferenciando este protótipo do que seria necessário em produção.
+
+---
+
+#### 3. Significado de cada campo do contrato: evitar ambiguidade
+
+**Pedido.** Documentar o contrato do evento com campos, tipos e obrigatoriedade.
+
+**Sugerido.** Tabela padrão: campo, tipo, obrigatório/opcional. Conciso, suficiente.
+
+**Aceito.** Tabela com campos, tipos, obrigatoriedade **e SIGNIFICADO em frase**, como o enunciado destaca. Aditivamente: nota sobre mudanças perigosas (exemplo: se `valor` começar a incluir frete, o esquema aceita, mas o contrato foi violado).
+
+**Recusado — significado como uma palavra.** Razão de comunicação: `valor: "O valor do Pix"` não esclarece: é o valor líquido? Inclui tarifa? E depois? A frase completa *"Valor monetário do Pix em reais; pode ser omitido em cenários específicos, mas quando presente é essencial para o cálculo de tarifa"* deixa claro o escopo e a consequência de ausência. Essa é exatamente a mudança de contrato disfarçada de mudança de implementação que o enunciado exemplifica.
+
+---
+
+#### 4. Pergunta de negócio para a agregação
+
+**Pedido.** Qual pergunta a agregação deveria responder?
+
+**Sugerido.** Três opções:
+- "Quantos Pix liquidados por hora?" (simples, responde infraestrutura)
+- "Quanto foi liquidado em reais por hora?" (alinha com receita e faturamento)
+- "Qual a média de Pix por hora?" (análise de padrão)
+
+**Aceito.** "Quanto foi liquidado em Pix por hora?" (segunda opção). Razão de negócio: responde a uma pergunta que alguém do faturamento faria: *"Qual foi meu volume de receita a cada hora?"* É informação que alimenta diretamente o sistema de tarifação e faturamento.
+
+**Recusado — "Quantos eventos por minuto."** Razão: é métrica de infraestrutura, não de negócio. Responde-se com processing time sem pensar, e não exercita a escolha do relógio, que é o ponto central da aula.
+**Aceito.** Alinhar o código ao ADR, e não o contrário:
+
+- `SEM_CONTRATO` como quarta saída da política, com valor zero e **sem consumir franquia**;
+- a coluna `situacao` em `tarifa`, porque três das quatro saídas valem `0.00` e significam coisas
+  diferentes — sem ela o extrato ficaria ambíguo justamente onde a auditoria precisa de clareza;
+- a oferta passou a ter **vigência**, e a busca é pela vigente *na competência do evento*. O ADR
+  diz "vigente" duas vezes, e sem isso um replay de agosto feito em outubro encontraria o contrato
+  errado — o fechamento mensal, que é o quarto critério do domínio, deixaria de ser reproduzível;
+- as outras duas saídas que o ADR declara e o código não tinha: **tarifação por faixa de valor** e
+  **teto mensal atingido**. É o "aprova, recusa e limita" do critério 1.
+
+**Efeito colateral, e ele importa.** Um teste automatizado já verde — o `emp-9999` recebendo
+R$ 1,90 no sexto Pix — estava *provando o comportamento errado*. Foi reescrito como
+`clienteSemContratoNaoECobrado`. Um teste que passa não é evidência de que a regra está certa: é
+evidência de que o código faz o que o teste diz, e aquele teste tinha sido escrito a partir do
+código, não a partir do ADR.
+
+*Onde isso aparece:* `SituacaoDaTarifaVO`, `DecisaoDeTarifacaoVO`, `FaixaDeTarifaVO`, o
+`buscarOfertaVigente` do repositório e os testes 7 a 11 do `IdempotenciaTest`.
+
+---
+
+### Allainn Christiam (254337) — revisão da etapa 2 e correção do agregador
+
+Ferramenta: Claude Code (Claude Opus). Interações de 23/08/2026.
+
+---
+
+#### 1. Revisar a etapa 2 antes da tag — o agregador não desserializava nada
+
+**Pedido.** Conferir se a entrega da aula 03 atende ao enunciado, antes de fechar a tag.
+
+**Encontrado, e não sugerido.** O `servico-agregador-pix` não conseguia ler uma única mensagem do
+produtor real. O `servico-pix` publica com `setAddTypeInfo(false)` — sem o cabeçalho `__TypeId__` —,
+e o agregador estava configurado com `spring.json.type.mapping`, que **depende** desse cabeçalho:
+
+```
+IllegalStateException: No type information in headers and no default type provided
+```
+
+Pior que falhar: o `DefaultErrorHandler` não trata `SerializationException` ("cannot process
+'SerializationException's directly"), então a mensagem era reentregue para sempre e a partição
+travava.
+
+**Como apareceu.** Escrevendo um teste que publica **JSON cru**, do jeito que o produtor publica. A
+bateria do agregador não existia; se tivesse sido escrita publicando objeto Java, teria passado e
+provado que o serviço funciona com um produtor que não existe.
+
+**Aceito.** `spring.json.use.type.headers: false` mais `value.default.type`, como o
+`servico-tarifacao` já fazia desde a etapa 1, e `ErrorHandlingDeserializer` envolvendo o
+`JsonDeserializer` — carga malformada passa a custar um registro, não a partição.
+
+---
+
+#### 2. A agregação perdia o acumulado a cada troca de hora
+
+**Encontrado.** O listener guardava **uma** `agregacaoAtual`, não um mapa de janelas. Um evento de
+hora diferente descartava o acumulado, e um retardatário **reiniciava a janela do zero**:
+
+```
+14:10  R$100  ->  janela 14h: 100
+14:20  R$200  ->  janela 14h: 300
+15:05  R$50   ->  janela 15h: 50
+14:30  R$400  ->  janela 14h: 400     <- os 300 sumiram
+```
+
+O `docs/entregas/aula-03.md` afirmava que o retardatário era "agregado no seu lugar correto". O
+código não fazia isso — e com três partições e várias empresas publicando, horas diferentes se
+intercalam o tempo todo, então o defeito não dependia de retardatário para aparecer.
+
+**Aceito.** `ConcurrentHashMap` de janelas, com `compute` atômico por chave. O teste 4 da bateria
+publica exatamente a sequência acima e exige 700,00 na janela das 14h.
+
+---
+
+#### 3. Estado no listener, e pacotes fora do padrão
+
+**Encontrado.** O acumulado e a decisão de "é janela nova" moravam no listener; os pacotes eram
+`listener/` e `config/`. A rubrica desta etapa nomeia como Insuficiente exatamente **"regra de
+negócio no listener"**, e o padrão são quatro pacotes: raiz, `controller`, `domain`, `service`.
+
+**Aceito.** Estado movido para o `AgregadorService`, `listener/` renomeado para `controller/`,
+`KafkaConfig` para a raiz, e a classe aninhada `JanelaDeHora` virou `JanelaDeHoraVO` em `domain`,
+com sufixo da lista fechada.
+
+---
+
+#### 4. A regra de compatibilidade dizia o contrário do que o rótulo escolhia
+
+**Encontrado.** O `docs/contrato.md` escolhia **BACKWARD** e justificava com "o consumidor antigo
+consegue desserializar dados novos... e o produtor pode ser atualizado primeiro" — que é a
+definição de **FORWARD** na tabela do próprio enunciado. Rótulo e justificativa se contradiziam.
+
+**Aceito.** FORWARD, que é o que o código sustenta: os dois consumidores declaram menos campos do
+que o produtor publica e ignoram desconhecidos, então o produtor sobe primeiro e cada consumidor
+acompanha no próprio ritmo.
+
+---
+
+#### 5. RECUSADO — reescrever o agregador em Kafka Streams
+
+**Sugerido.** Trocar a agregação manual por Kafka Streams com `windowedBy`, já que a dependência
+`kafka-streams` está no `pom.xml` e a API resolveria janela, estado e retardatário de uma vez.
+
+**RECUSADO.** Razão técnica: o enunciado pede Kafka Streams como **desafio opcional, ao lado da
+versão à mão, para comparar as duas** — não como substituição. Trocar apagaria justamente o que
+está sendo avaliado, que é a equipe decidir o alinhamento da janela e o tratamento do retardatário.
+Streams tomaria as duas decisões por nós, e a rubrica não teria o que ler. A dependência não usada
+deveria sair do `pom.xml`, mas isso é limpeza, não arquitetura.
+
+---
+
+#### 6. RECUSADO — implementar watermark para fechar a janela
+
+**Sugerido.** Adicionar watermark, descartando eventos que cheguem depois de um limite.
+
+**RECUSADO.** Duas razões. É desafio opcional nesta etapa, e o `docs/entregas/aula-03.md` responde
+à pergunta 3 dizendo que **nenhum retardatário é descartado** — implementar o corte tornaria o
+documento falso no mesmo dia em que foi escrito. Além disso, para "quanto foi liquidado por hora",
+descartar receita real que chegou tarde é pior do que um total que se corrige: a pergunta é de
+fechamento contábil, não de painel em tempo real. Fica registrado como dívida, com a decisão
+interessante — o que fazer com quem chega depois do corte — em aberto.
+
+---
+
+#### 7. A estrutura do IA.md tinha trocado a autoria de três interações
+
+**Encontrado.** O cabeçalho `## Aula 03` havia sido inserido no meio da seção da Aula 02, e o
+arquivo ficou com **duas** seções `## Aula 02`. O efeito colateral é que as interações 7, 8 e 9 —
+escritas por mim na etapa anterior — apareciam sob o nome de outro integrante.
+
+**Aceito.** Reorganização em duas seções, uma por aula, com cada bloco de interações sob o autor
+que o escreveu. Nada de conteúdo foi alterado, só a ordem dos blocos.
+
+Vale como aviso ao grupo: num arquivo que várias pessoas editam e onde a **autoria é justamente o
+que se avalia**, inserir seção nova no meio é fácil de fazer sem perceber. Acrescentem sempre no
+fim, sob o próprio cabeçalho.
+
+---
+
+<!--
+  Demais integrantes: acrescentem a sua subseção abaixo, no mesmo formato
+  (### Nome (matrícula) — parte pela qual respondeu).
+-->

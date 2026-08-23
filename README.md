@@ -71,12 +71,28 @@ O processo completo, os quatro critérios e as consequências aceitas estão em
 
 ## Agregador: quanto foi liquidado por hora
 
-O `servico-agregador-pix` (etapa 3) consome do mesmo tópico que a tarifação, mas com um grupo de consumidores próprio (`agregador-pix-por-hora`). Agrega Pix liquidados por hora e responde: **"Quanto foi liquidado em Pix por hora?"**
+O `servico-agregador-pix` (etapa 2) consome o **mesmo tópico** que a tarifação, num **grupo próprio**,
+e responde: **"Quanto foi liquidado em Pix por hora?"** — em reais e em quantidade.
 
-- **Relógio:** event time (hora de ocorrência da transação, não chegada)
-- **Janela:** 1 hora, alinhada por tempo UTC
-- **Saída:** logs com agregação por hora
-- **Reproduzibilidade:** garantida — reprocessar sempre dá o mesmo resultado
+```bash
+mvn -f servico-agregador-pix/pom.xml spring-boot:run
+```
+
+| | |
+|---|---|
+| Grupo | `agregador-pix-por-hora` — distinto de `tarifacao` |
+| Relógio | **event time** (`liquidadoEm` do evento), não a hora de chegada |
+| Janela | 1 hora, alinhada em UTC, fim exclusivo |
+| Retardatário | somado na janela dele; nenhum evento é descartado |
+| Reprocessamento | resultado idêntico |
+| Saída | log, com a janela atualizada, partição e offset |
+
+Os dois consumidores rodam ao mesmo tempo e **nenhum rouba mensagem do outro**: grupos diferentes
+têm ponteiros de leitura independentes. O agregador lê o tópico desde o início
+(`auto-offset-reset: earliest`), então encontra o histórico mesmo subindo depois.
+
+Detalhes em [servico-agregador-pix/README.md](servico-agregador-pix/README.md); as decisões de
+relógio e janela, em [docs/entregas/aula-03.md](docs/entregas/aula-03.md).
 
 ## Troubleshooting
 
