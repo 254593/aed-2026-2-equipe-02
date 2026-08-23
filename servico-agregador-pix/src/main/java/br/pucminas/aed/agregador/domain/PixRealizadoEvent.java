@@ -5,48 +5,45 @@ import java.time.Instant;
 import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * Fato publicado pelo servico-pix. A classe é imutável de forma explícita:
- * campos private final, construtor único e nenhum setter.
- * 
- * Esta é uma cópia do evento original para evitar dependência do servico-pix.
+ * A visao QUE ESTE SERVICO TEM do fato PixRealizado.
+ *
+ * CONSUMIDOR TOLERANTE, e de proposito. O servico-pix publica dez campos; aqui
+ * declaramos os quatro que a agregacao usa. Os outros seis sao ignorados por
+ * @JsonIgnoreProperties, e e isso que permite ao produtor acrescentar campos
+ * sem quebrar este consumidor — exatamente a compatibilidade que o
+ * docs/contrato.md promete. Cada campo declarado a mais seria uma dependencia
+ * nossa sobre o formato alheio, sem nada em troca.
+ *
+ * Nao ha JAR compartilhado com o servico-pix nem com o servico-tarifacao: o
+ * contrato entre os tres e o JSON no topico, e cada lado tem a sua classe.
+ *
+ * Imutabilidade explicita, e nao record: campos private final, sem setter.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public final class PixRealizadoEvent {
 
     private final String eventoId;
+
+    /** EVENT TIME: o instante em que o Pix liquidou no SPI. Define a janela. */
     private final Instant liquidadoEm;
+
     private final String idTransacaoPix;
-    private final String idEmpresa;
     private final BigDecimal valor;
-    private final String chavePix;
-    private final String tipoChave;
-    private final String bancoDestino;
-    private final String endToEndId;
-    private final String pagadorNome;
 
     @JsonCreator
     public PixRealizadoEvent(@JsonProperty("eventoId") String eventoId,
                              @JsonProperty("liquidadoEm") Instant liquidadoEm,
                              @JsonProperty("idTransacaoPix") String idTransacaoPix,
-                             @JsonProperty("idEmpresa") String idEmpresa,
-                             @JsonProperty("valor") BigDecimal valor,
-                             @JsonProperty("chavePix") String chavePix,
-                             @JsonProperty("tipoChave") String tipoChave,
-                             @JsonProperty("bancoDestino") String bancoDestino,
-                             @JsonProperty("endToEndId") String endToEndId,
-                             @JsonProperty("pagadorNome") String pagadorNome) {
-        this.eventoId = Objects.requireNonNull(eventoId, "eventoId é obrigatório");
-        this.liquidadoEm = Objects.requireNonNull(liquidadoEm, "liquidadoEm é obrigatório");
-        this.idTransacaoPix = Objects.requireNonNull(idTransacaoPix, "idTransacaoPix é obrigatório");
-        this.idEmpresa = Objects.requireNonNull(idEmpresa, "idEmpresa é obrigatório");
+                             @JsonProperty("valor") BigDecimal valor) {
+
+        this.eventoId = Objects.requireNonNull(eventoId, "eventoId e obrigatorio");
+        this.liquidadoEm = Objects.requireNonNull(liquidadoEm, "liquidadoEm e obrigatorio");
+        this.idTransacaoPix = idTransacaoPix;
         this.valor = valor;
-        this.chavePix = chavePix;
-        this.tipoChave = tipoChave;
-        this.bancoDestino = bancoDestino;
-        this.endToEndId = endToEndId;
-        this.pagadorNome = pagadorNome;
     }
 
     public String getEventoId() {
@@ -61,40 +58,15 @@ public final class PixRealizadoEvent {
         return idTransacaoPix;
     }
 
-    public String getIdEmpresa() {
-        return idEmpresa;
-    }
-
     public BigDecimal getValor() {
         return valor;
     }
 
-    public String getChavePix() {
-        return chavePix;
-    }
-
-    public String getTipoChave() {
-        return tipoChave;
-    }
-
-    public String getBancoDestino() {
-        return bancoDestino;
-    }
-
-    public String getEndToEndId() {
-        return endToEndId;
-    }
-
-    public String getPagadorNome() {
-        return pagadorNome;
-    }
-
     @Override
     public String toString() {
-        return "PixRealizadoEvent{" + "eventoId=" + eventoId
+        return "PixRealizadoEvent{eventoId=" + eventoId
                 + ", liquidadoEm=" + liquidadoEm
                 + ", idTransacaoPix=" + idTransacaoPix
-                + ", idEmpresa=" + idEmpresa
                 + ", valor=" + valor + "}";
     }
 }

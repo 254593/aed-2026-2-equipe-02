@@ -1,21 +1,49 @@
 pix:
   topico: pagamentos.pix.realizado.v1
   agregador:
+    # GRUPO PROPRIO, diferente do grupo `tarifacao` da etapa 1. Os dois consomem
+    # o mesmo topico e nenhum rouba mensagem do outro: cada grupo tem o proprio
+    # ponteiro de leitura.
     group-id: agregador-pix-por-hora
 
 spring:
   application:
     name: servico-agregador-pix
+
+  # Sem servidor web: o agregador nao expoe HTTP. O resultado e observavel pelo
+  # log, que e o que a Parte B admite.
+  main:
+    web-application-type: none
+
   kafka:
     bootstrap-servers: localhost:19092
+
     consumer:
       group-id: ${pix.agregador.group-id}
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.type.mapping: br.pucminas.aed.agregador.domain.PixRealizadoEvent:br.pucminas.aed.agregador.domain.PixRealizadoEvent
+      # earliest, e nao latest: um grupo NOVO precisa enxergar o historico do
+      # topico. Sem isso o agregador so veria o que chegasse depois de ele subir
+      # — e a afirmacao de que reprocessar do inicio reproduz o mesmo resultado
+      # (docs/entregas/aula-03.md, pergunta 4) nao teria como ser verdade.
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
-server:
-  port: 8081
+      # ErrorHandlingDeserializer envolve o JsonDeserializer: carga malformada
+      # vira null e e descartada com log, em vez de estourar SerializationException
+      # antes do listener e travar a particao em reentrega eterna.
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+
+        # O servico-pix publica com setAddTypeInfo(false) — nao ha cabecalho
+        # __TypeId__ na mensagem. O consumidor precisa dizer qual classe usar,
+        # senao: "No type information in headers and no default type provided".
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: br.pucminas.aed.agregador.domain.PixRealizadoEvent
+        spring.json.trusted.packages: br.pucminas.aed.agregador.domain
+
+        # Se este servico subir antes de o topico existir, o padrao sao 5 minutos
+        # de tela parada ate os metadados expirarem.
+        metadata.max.age.ms: 5000
 
 logging:
   level:

@@ -1,40 +1,51 @@
 package br.pucminas.aed.agregador.domain;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.Objects;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 /**
- * Resultado da agregação de Pix por janela de tempo (hora).
- * Imutável, representa a soma de valores liquidados em uma hora específica.
+ * Quanto foi liquidado numa janela de uma hora: o total em reais e quantos Pix.
+ *
+ * IMUTAVEL. Somar produz uma instancia nova, e nao muta esta. E o que permite
+ * guardar a agregacao num mapa concorrente sem lock: a substituicao do valor e
+ * atomica, e ninguem enxerga um acumulado pela metade.
+ *
+ * Objeto de valor: sem identidade propria alem da janela que o define.
  */
 public final class AgregacaoPorHoraVO {
 
-    private final Instant inicioJanela;
-    private final Instant fimJanela;
+    private static final BigDecimal ZERO = new BigDecimal("0.00");
+
+    private final JanelaDeHoraVO janela;
     private final BigDecimal valorTotal;
     private final long quantidade;
 
-    @JsonCreator
-    public AgregacaoPorHoraVO(@JsonProperty("inicioJanela") Instant inicioJanela,
-                              @JsonProperty("fimJanela") Instant fimJanela,
-                              @JsonProperty("valorTotal") BigDecimal valorTotal,
-                              @JsonProperty("quantidade") long quantidade) {
-        this.inicioJanela = Objects.requireNonNull(inicioJanela, "inicioJanela é obrigatório");
-        this.fimJanela = Objects.requireNonNull(fimJanela, "fimJanela é obrigatório");
-        this.valorTotal = Objects.requireNonNull(valorTotal, "valorTotal é obrigatório");
+    private AgregacaoPorHoraVO(JanelaDeHoraVO janela, BigDecimal valorTotal, long quantidade) {
+        this.janela = Objects.requireNonNull(janela, "janela e obrigatoria");
+        this.valorTotal = Objects.requireNonNull(valorTotal, "valorTotal e obrigatorio");
         this.quantidade = quantidade;
     }
 
-    public Instant getInicioJanela() {
-        return inicioJanela;
+    /** A janela ainda vazia — nenhum Pix contabilizado. */
+    public static AgregacaoPorHoraVO vazia(JanelaDeHoraVO janela) {
+        return new AgregacaoPorHoraVO(janela, ZERO, 0L);
     }
 
-    public Instant getFimJanela() {
-        return fimJanela;
+    /**
+     * Soma um Pix a esta agregacao, devolvendo uma nova.
+     *
+     * Valor nulo conta como zero na soma, mas AINDA CONTA na quantidade: o Pix
+     * aconteceu. Descarta-lo faria a contagem de transacoes divergir do numero
+     * real de eventos, e a pergunta "quantos Pix por hora" passaria a mentir
+     * por causa de um campo ausente.
+     */
+    public AgregacaoPorHoraVO somar(BigDecimal valor) {
+        BigDecimal acrescimo = valor == null ? ZERO : valor;
+        return new AgregacaoPorHoraVO(janela, valorTotal.add(acrescimo), quantidade + 1);
+    }
+
+    public JanelaDeHoraVO getJanela() {
+        return janela;
     }
 
     public BigDecimal getValorTotal() {
@@ -47,10 +58,6 @@ public final class AgregacaoPorHoraVO {
 
     @Override
     public String toString() {
-        return "AgregacaoPorHora{" +
-                "janela=[" + inicioJanela + ", " + fimJanela + "]" +
-                ", valorTotal=" + valorTotal +
-                ", quantidade=" + quantidade +
-                "}";
+        return "janela " + janela + " | R$ " + valorTotal + " | " + quantidade + " Pix";
     }
 }
