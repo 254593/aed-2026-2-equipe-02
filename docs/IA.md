@@ -619,3 +619,49 @@ fim, sob o próprio cabeçalho.
   Demais integrantes: acrescentem a sua subseção abaixo, no mesmo formato
   (### Nome (matrícula) — parte pela qual respondeu).
 -->
+
+---
+
+## Aula 04
+
+### Evandro V. Junior (254593) — ADR-003, auditoria dos documentos e escopo da entrega
+
+Ferramenta: Claude Code (Claude Opus 5). Interações de 05/09/2026.
+
+---
+
+#### 1. "O número de partições é irreversível" — a afirmação da ferramenta estava errada
+
+**Pedido.** Revisar a afirmação, escrita pela ferramenta no rascunho do ADR-003, de que aumentar o
+número de partições quebraria a ordem e de que o número seria *"na prática, uma decisão irreversível
+deste tópico"*. A objeção da equipe: mesmo que a chave passe a cair em outra partição, cada partição
+continua ordenada.
+
+**Sugerido originalmente — e incorreto.** O rascunho afirmava que aumentar partições destrói a ordem
+das chaves existentes, e concluía pela irreversibilidade. A consequência nº 2 do ADR dizia, na mesma
+linha, que o paralelismo tinha "teto de três, e o teto é permanente".
+
+**RECUSADO, e a recusa estava certa.** A objeção procede: a ordem **dentro** da partição nunca se
+perde. O que se perde ao aumentar **no lugar** (`--alter --partitions`) é outra coisa — a garantia de
+**um único leitor por empresa a cada instante**: com backlog nas duas, os eventos novos de uma
+empresa caem numa partição e os antigos ficam em outra, dois consumidores leem "4 de 10 isenções
+usadas" e os dois emitem `FRANQUIA`. É a premissa do `read-then-write`, não a ordem, que estava em
+jogo. E ela é preservável: o **cutover com dreno** — tópico novo, pausar a publicação, drenar até lag
+zero, virar — migra sem janela de leitura concorrente, ao custo de indisponibilidade de publicação.
+
+**Aceito.** O ADR-003 foi corrigido em dois pontos: a pergunta 4 passou a distinguir "aumentar no
+lugar" de "migrar", com o procedimento e os custos; e a consequência nº 2 deixou de ser restrição
+permanente e virou **dívida dimensionada** — três partições vieram da criação do tópico, não de
+dimensionamento, e a recomendação passou a ser subir esse número **agora**, enquanto o dreno leva
+segundos. O javadoc de `TarifacaoService` também foi corrigido: ele proibia aumentar partições e
+recomendava "rever a granularidade da chave", que é justamente o cenário do `idTransacaoPix` que o
+próprio javadoc condena três linhas acima.
+
+---
+
+<!--
+  Demais integrantes: acrescentem a sua subseção da Aula 04 abaixo, no mesmo
+  formato (### Nome (matrícula) — parte pela qual respondeu).
+  A rubrica pede TRÊS interações com ao menos UMA recusa justificada POR
+  INTEGRANTE — as seções acima cobrem apenas um.
+-->
