@@ -615,13 +615,6 @@ fim, sob o próprio cabeçalho.
 
 ---
 
-<!--
-  Demais integrantes: acrescentem a sua subseção abaixo, no mesmo formato
-  (### Nome (matrícula) — parte pela qual respondeu).
--->
-
----
-
 ## Aula 04
 
 ### Evandro V. Junior (254593) — ADR-003, auditoria dos documentos e escopo da entrega
@@ -660,7 +653,7 @@ próprio javadoc condena três linhas acima.
 ---
 
 <!--
-  Demais integrantes: acrescentem a sua subseção da Aula 04 abaixo, no mesmo
+  Demais integrantes: acrescentem a sua subseção da Aula 05 abaixo, no mesmo
   formato (### Nome (matrícula) — parte pela qual respondeu).
   A rubrica pede TRÊS interações com ao menos UMA recusa justificada POR
   INTEGRANTE — as seções acima cobrem apenas um.
