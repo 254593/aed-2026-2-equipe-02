@@ -103,6 +103,31 @@ CREATE TABLE IF NOT EXISTS oferta_faixa (
 -- nem decrementado". Sem este CHECK, a regra depende de alguem ler o javadoc
 -- antes de escrever a saga da aula 05; com ele, o banco recusa.
 -- ---------------------------------------------------------------------------
+-- A COLUNA `versao` FAZ DESTA TABELA UM EVENT STORE, e nao apenas um registro.
+--
+-- O stream de um agregado e (id_empresa, competencia) — o CicloDeTarifacao do
+-- ADR-005. NAO existe coluna stream_id: as duas colunas ja sao a identidade, e
+-- uma terceira concatenando-as seria redundancia sem constraint que a
+-- disciplinasse, livre para divergir em silencio.
+--
+-- A versao e a ORDEM LOGICA do fato dentro do stream, e e por ela que o replay
+-- percorre o historico — nunca por liquidado_em, que e dado e nao indice (e que,
+-- alem disso, e gravado no fuso default da JVM numa coluna sem time zone).
+--
+-- O INDICE UNICO E O MECANISMO DE DETECCAO DE ESCRITA CONCORRENTE. Hoje existe
+-- um escritor por empresa, garantido pela chave de particao do ADR-003, entao
+-- ele nunca dispara. Ele existe para o dia em que a compensacao puser um
+-- orquestrador emitindo estornos enquanto Pix novos chegam pela particao: sem
+-- ele, os dois calculariam a mesma versao e o acumulado ficaria errado sem que
+-- nada acusasse; com ele, o segundo leva violacao e a transacao inteira volta.
+--
+-- E indice unico, e nao ADD CONSTRAINT, porque `CREATE UNIQUE INDEX IF NOT
+-- EXISTS` e idempotente e este arquivo roda a cada subida da aplicacao.
+--
+-- BANCO PREEXISTENTE: a coluna entra no CREATE TABLE, entao um banco criado
+-- antes desta mudanca nao a recebe. Derrube com `docker compose down -v` e suba
+-- de novo. Nao ha migracao com backfill aqui de proposito — inventar versao para
+-- fatos historicos e escrever ordem que ninguem observou.
 CREATE TABLE IF NOT EXISTS tarifa (
   evento_id        VARCHAR(64)   PRIMARY KEY,
   id_empresa       VARCHAR(32)   NOT NULL,
@@ -110,10 +135,46 @@ CREATE TABLE IF NOT EXISTS tarifa (
   competencia      VARCHAR(7)    NOT NULL,  -- YYYY-MM, do liquidadoEm do evento
   situacao         VARCHAR(20)   NOT NULL,  -- SEM_CONTRATO|FRANQUIA|FAIXA|TETO_PARCIAL|TETO_ATINGIDO
   valor            NUMERIC(10,2) NOT NULL CHECK (valor >= 0),
-  liquidado_em     TIMESTAMP     NOT NULL
+  liquidado_em     TIMESTAMP     NOT NULL,
+  versao           BIGINT        NOT NULL   -- ordem do fato no stream (id_empresa, competencia)
 );
 
 CREATE INDEX IF NOT EXISTS idx_tarifa_empresa_competencia ON tarifa (id_empresa, competencia);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tarifa_stream_versao
+    ON tarifa (id_empresa, competencia, versao);
+
+-- ---------------------------------------------------------------------------
+-- A PROJECAO. Derivada, descartavel, e nada mais.
+--
+-- Uma linha por (id_empresa, competencia), desnormalizada para o fechamento da
+-- competencia. NENHUM codigo escreve aqui alem do projetor, e nenhuma decisao le
+-- daqui: a tarifacao continua lendo os fatos da `tarifa`. Se um dia a decisao
+-- passar a ler a projecao, ela deixa de ser derivada e vira fonte da verdade sem
+-- que ninguem tenha decidido isso.
+--
+-- `versao_projetada` e a ultima versao do stream ja incorporada. Ela existe por
+-- dois motivos: o projetor avanca a partir dela, em vez de recalcular tudo; e a
+-- DEFASAGEM passa a ser medida, e nao estimada — o atraso desta linha e
+-- (versao atual do stream - versao_projetada), em fatos.
+--
+-- Apagar esta tabela inteira e SEGURO por construcao, e ha teste que exige isso:
+-- o projetor reconstroi do zero e chega ao mesmo resultado. Se um dia apagar
+-- quebrar alguma coisa, a projecao deixou de ser cache.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS fatura_competencia (
+  id_empresa        VARCHAR(32)   NOT NULL,
+  competencia       VARCHAR(7)    NOT NULL,
+  total_tarifado    NUMERIC(12,2) NOT NULL,
+  qtd_pix           BIGINT        NOT NULL,
+  qtd_sem_contrato  BIGINT        NOT NULL,
+  qtd_franquia      BIGINT        NOT NULL,
+  qtd_faixa         BIGINT        NOT NULL,
+  qtd_teto_parcial  BIGINT        NOT NULL,
+  qtd_teto_atingido BIGINT        NOT NULL,
+  versao_projetada  BIGINT        NOT NULL,
+  PRIMARY KEY (id_empresa, competencia)
+);
 
 -- ---------------------------------------------------------------------------
 -- Carga de exemplo. Dados FICTICIOS: o repositorio e publico.

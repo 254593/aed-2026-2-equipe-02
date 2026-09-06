@@ -58,9 +58,12 @@ deste sistema.** A fronteira é a competência, escopo das duas invariantes do c
 
 ```sql
 ALTER TABLE tarifa ADD COLUMN versao BIGINT NOT NULL;
-ALTER TABLE tarifa ADD CONSTRAINT uq_tarifa_stream_versao
-      UNIQUE (id_empresa, competencia, versao);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tarifa_stream_versao
+    ON tarifa (id_empresa, competencia, versao);
 ```
+
+Índice único em vez de `ADD CONSTRAINT` porque o `schema.sql` roda a cada subida e precisa ser
+idempotente; a garantia é a mesma.
 
 Não há coluna `stream_id`: `(id_empresa, competencia)` é a identidade do stream.
 

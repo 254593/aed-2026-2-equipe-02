@@ -390,14 +390,19 @@ class IdempotenciaTest {
         // O CHECK do schema transforma essa regra, que hoje vive em javadoc, em
         // algo que o banco recusa. Este teste existe para que a constraint nao
         // seja removida por engano numa migracao futura.
+        // A versao vai preenchida DE PROPOSITO. Sem ela, o NOT NULL da coluna
+        // dispararia antes do CHECK e o teste passaria sem provar nada sobre o
+        // valor negativo — foi exatamente o que aconteceu quando a coluna
+        // entrou, e so a leitura da excecao revelou.
         assertThatThrownBy(() -> jdbc.update(
                 "INSERT INTO tarifa (evento_id, id_empresa, id_transacao_pix, competencia,"
-                        + " situacao, valor, liquidado_em)"
-                        + " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        + " situacao, valor, liquidado_em, versao)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 "evt-negativo", EMPRESA_PLANO_PJ, "pix-negativo", COMPETENCIA,
                 SituacaoDaTarifaVO.FAIXA.name(), new BigDecimal("-5.00"),
-                Timestamp.from(Instant.parse(LIQUIDADO_EM))))
-                .isInstanceOf(DataIntegrityViolationException.class);
+                Timestamp.from(Instant.parse(LIQUIDADO_EM)), Long.valueOf(1L)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("valor");
 
         assertThat(repositorio.contarPixNaCompetencia(EMPRESA_PLANO_PJ, COMPETENCIA))
                 .isEqualTo(0L);
