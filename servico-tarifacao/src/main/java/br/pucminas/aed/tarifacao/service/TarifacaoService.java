@@ -68,9 +68,24 @@ import br.pucminas.aed.tarifacao.domain.PixRealizadoEvent;
  *    para o teto mensal, que tambem le antes de escrever.
  *
  *    O custo aceito e o outro lado do mesmo eixo: uma empresa de volume muito
- *    alto concentra carga numa particao (hot partition). Se isso aparecer, a
- *    saida e rever a granularidade da chave — nao aumentar particoes, porque
- *    isso rebate o hash e quebra a ordem das chaves ja existentes.
+ *    alto concentra carga numa particao (hot partition). VER O ADR-003, que
+ *    revisa o que esta escrito aqui em dois pontos.
+ *
+ *    Primeiro: NAO reveja a granularidade da chave. Uma chave mais fina
+ *    espalha a mesma empresa por particoes diferentes, que e exatamente o
+ *    cenario do idTransacaoPix descrito acima. Para hot partition a saida
+ *    aceita e segregar a empresa quente num topico proprio, com o acumulador
+ *    dela isolado — nao relaxar a ordem.
+ *
+ *    Segundo: aumentar particoes NAO e proibido, e a versao anterior deste
+ *    javadoc dizia que era. O que e inseguro e aumentar NO LUGAR, com
+ *    --alter --partitions: enquanto houver backlog, os eventos novos de uma
+ *    empresa caem numa particao e os antigos ficam em outra, e a mesma
+ *    empresa passa a ser lida por DOIS consumidores ao mesmo tempo. Nao e a
+ *    ordem dentro da particao que se perde: e a garantia de um unico leitor
+ *    por empresa, que e a premissa deste read-then-write. A migracao segura e
+ *    um cutover com dreno — topico novo, pausar a publicacao, drenar ate lag
+ *    zero, virar —, e o ADR-003 recomenda faze-la enquanto o topico e pequeno.
  */
 @Service
 public class TarifacaoService {
