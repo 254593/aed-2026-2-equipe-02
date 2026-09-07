@@ -1,7 +1,7 @@
 package br.pucminas.aed.tarifacao.service;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -290,7 +290,9 @@ public class TarifacaoRepository {
                 competencia,
                 decisao.getSituacao().name(),
                 decisao.getValor(),
-                Timestamp.from(evento.getLiquidadoEm()),
+                // OffsetDateTime em UTC -> TIMESTAMP WITH TIME ZONE. Timestamp.from()
+                // numa coluna sem fuso gravava a hora local da JVM.
+                evento.getLiquidadoEm().atOffset(ZoneOffset.UTC),
                 Long.valueOf(versao));
     }
 

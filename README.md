@@ -89,8 +89,9 @@ mvn -f servico-agregador-pix/pom.xml spring-boot:run
 | Saída | log, com a janela atualizada, partição e offset |
 
 Os dois consumidores rodam ao mesmo tempo e **nenhum rouba mensagem do outro**: grupos diferentes
-têm ponteiros de leitura independentes. O agregador lê o tópico desde o início
-(`auto-offset-reset: earliest`), então encontra o histórico mesmo subindo depois.
+têm ponteiros de leitura independentes. O agregador lê o tópico desde o início **a cada subida**
+(`seekToBeginning` na atribuição das partições, além do `auto-offset-reset: earliest`): o estado
+das janelas mora em memória, e um reinício comum reconstrói tudo pelo log sem apagar o grupo.
 
 Detalhes em [servico-agregador-pix/README.md](servico-agregador-pix/README.md); as decisões de
 relógio e janela, em [docs/entregas/aula-03.md](docs/entregas/aula-03.md).
@@ -129,6 +130,7 @@ O publicador envia um objeto `RealizacaoPixVO` com os campos essenciais:
 - `valor` — obrigatório e maior que zero
 - `chavePix`, `tipoChave`, `bancoDestino`, `endToEndId`, `pagadorNome` — opcionais, mas importantes para o rastreio do evento
 - `eventoId` — opcional; se informado, vira a identidade do fato e garante idempotência
+- `liquidadoEm` — opcional, ISO-8601, não pode estar no futuro; é o instante em que o Pix liquidou no SPI e define a **competência**. Omitido, o serviço usa o próprio relógio, o que só é correto para quem publica no ato da liquidação
 
 O evento publicado no Kafka tem cabeçalhos CloudEvents:
 
@@ -328,12 +330,13 @@ Roda com Kafka embutido e H2 — **sem Docker e sem o `servico-pix`**:
 mvn -f servico-tarifacao/pom.xml test
 ```
 
-Trinta e seis cenários. Dezesseis no `IdempotenciaTest`, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
+Quarenta e um cenários. Dezoito no `IdempotenciaTest`, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
 3x produz efeito 1x** · consumidor tolerante a campos desconhecidos · `ce_id` ausente · mesmo
 `idTransacaoPix` com `eventoId` distintos · isenção por franquia · a faixa de valor, com a fronteira
 exclusiva · empresa sem contrato não é cobrada · contrato encerrado · troca de plano respeitando a
 competência do evento · o estouro do teto cobrado parcialmente · só o isento consome franquia ·
-isolamento por competência. A tabela completa está em
+isolamento por competência · **mensagem que não é JSON vai para a DLQ sem travar a partição** ·
+`liquidado_em` não depende do fuso da JVM. A tabela completa está em
 [servico-tarifacao/README.md](servico-tarifacao/README.md#rodar).
 
 O `servico-pix` tem a própria bateria (`mvn -f servico-pix/pom.xml test`): ISO-8601 no fio, tópico

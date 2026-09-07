@@ -194,6 +194,37 @@ class PixServiceTest {
                 () -> pixService.realizar(realizacao));
     }
 
+    @Test
+    @org.junit.jupiter.api.DisplayName("liquidadoEm informado e preservado no evento e no ce_time")
+    void liquidadoEmInformadoEPreservado() {
+        when(clienteDoBroker.send(any(ProducerRecord.class))).thenReturn(new CompletableFuture<>());
+        Instant liquidadoEmJulho = Instant.parse("2026-07-31T23:30:00Z");
+        RealizacaoPixVO realizacao = new RealizacaoPixVO(
+                null, liquidadoEmJulho, "pix-001", "emp-0001", new BigDecimal("150.00"),
+                "fulano@exemplo.com", "EMAIL", "999",
+                "E99900000202608141300000000001", "Empresa Ficticia");
+
+        PixRealizadoEvent evento = pixService.realizar(realizacao);
+
+        // o relogio do servico marca 14/08; o Pix e de 31/07 e continua sendo de julho
+        assertThat(evento.getLiquidadoEm()).isEqualTo(liquidadoEmJulho);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<ProducerRecord<String, Object>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(clienteDoBroker).send(captor.capture());
+        assertThat(cabecalho(captor.getValue(), "ce_time")).isEqualTo("2026-07-31T23:30:00Z");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("liquidadoEm no futuro e recusado")
+    void lancaExcecaoQuandoLiquidadoEmEstaNoFuturo() {
+        RealizacaoPixVO realizacao = new RealizacaoPixVO(
+                null, Instant.parse("2026-08-14T13:00:01Z"), "pix-001", "emp-0001",
+                new BigDecimal("150.00"), "fulano@exemplo.com", "EMAIL", "999",
+                "E99900000202608141300000000001", "Empresa Ficticia");
+        assertThrows(IllegalArgumentException.class,
+                () -> pixService.realizar(realizacao));
+    }
+
     private String cabecalho(ProducerRecord<String, Object> registro, String nome) {
         Header cabecalho = registro.headers().lastHeader(nome);
         assertThat(cabecalho).isNotNull();

@@ -111,8 +111,7 @@ CREATE TABLE IF NOT EXISTS oferta_faixa (
 -- disciplinasse, livre para divergir em silencio.
 --
 -- A versao e a ORDEM LOGICA do fato dentro do stream, e e por ela que o replay
--- percorre o historico — nunca por liquidado_em, que e dado e nao indice (e que,
--- alem disso, e gravado no fuso default da JVM numa coluna sem time zone).
+-- percorre o historico — nunca por liquidado_em, que e dado e nao indice.
 --
 -- O INDICE UNICO E O MECANISMO DE DETECCAO DE ESCRITA CONCORRENTE. Hoje existe
 -- um escritor por empresa, garantido pela chave de particao do ADR-003, entao
@@ -125,8 +124,8 @@ CREATE TABLE IF NOT EXISTS oferta_faixa (
 -- EXISTS` e idempotente e este arquivo roda a cada subida da aplicacao.
 --
 -- BANCO PREEXISTENTE: a coluna entra no CREATE TABLE, entao um banco criado
--- antes desta mudanca nao a recebe. Derrube com `docker compose down -v` e suba
--- de novo. Nao ha migracao com backfill aqui de proposito — inventar versao para
+-- antes desta mudanca nao a recebe — o mesmo vale para o tipo de liquidado_em.
+-- Derrube com `docker compose down -v` e suba de novo. Nao ha migracao com backfill aqui de proposito — inventar versao para
 -- fatos historicos e escrever ordem que ninguem observou.
 CREATE TABLE IF NOT EXISTS tarifa (
   evento_id        VARCHAR(64)   PRIMARY KEY,
@@ -135,7 +134,11 @@ CREATE TABLE IF NOT EXISTS tarifa (
   competencia      VARCHAR(7)    NOT NULL,  -- YYYY-MM, do liquidadoEm do evento
   situacao         VARCHAR(20)   NOT NULL,  -- SEM_CONTRATO|FRANQUIA|FAIXA|TETO_PARCIAL|TETO_ATINGIDO
   valor            NUMERIC(10,2) NOT NULL CHECK (valor >= 0),
-  liquidado_em     TIMESTAMP     NOT NULL,
+  -- WITH TIME ZONE, e nao TIMESTAMP: o driver gravava o Instant no fuso
+  -- default da JVM numa coluna sem fuso, e um Pix de 2026-09-01T02:00Z saia
+  -- como 2026-08-31 23:00 ao lado de competencia = '2026-09'. A decisao nunca
+  -- leu esta coluna, mas o fechamento "reconstruido do historico" leria.
+  liquidado_em     TIMESTAMP WITH TIME ZONE NOT NULL,
   versao           BIGINT        NOT NULL   -- ordem do fato no stream (id_empresa, competencia)
 );
 

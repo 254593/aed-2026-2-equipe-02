@@ -20,7 +20,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.context.TestPropertySource;
 
@@ -52,6 +54,9 @@ class AgregacaoPorHoraTest {
 
     @Autowired
     private AgregadorService agregador;
+
+    @Autowired
+    private KafkaListenerEndpointRegistry containers;
 
     @Value("${spring.embedded.kafka.brokers}")
     private String servidores;
@@ -161,6 +166,32 @@ class AgregacaoPorHoraTest {
         assertThat(agregador.panorama())
                 .as("tres janelas distintas, uma por hora de liquidacao")
                 .hasSize(3);
+    }
+
+    @Test
+    @DisplayName("8 - reiniciar o consumidor reconstroi as janelas pelo log, mesmo com o offset ja confirmado")
+    void reinicioReconstroiAsJanelasPeloLog() {
+        // Hora que nenhum outro teste usa: no reinicio o log INTEIRO e relido,
+        // e as janelas dos outros testes voltam junto.
+        Instant madrugada = Instant.parse("2026-08-24T03:10:00Z");
+        publicar("pix-801", "emp-0001", "100.00", "2026-08-24T03:10:00.000Z");
+        publicar("pix-802", "emp-0001", "200.00", "2026-08-24T03:20:00.000Z");
+        aguardarQuantidade(madrugada, 2L);
+
+        // a queda do processo: o container para (e confirma o offset), o
+        // estado em memoria some
+        for (MessageListenerContainer container : containers.getListenerContainers()) {
+            container.stop();
+        }
+        agregador.limpar();
+        assertThat(agregador.da(madrugada).getQuantidade()).isZero();
+
+        // a subida: sem publicar nada de novo, a janela tem que voltar inteira
+        for (MessageListenerContainer container : containers.getListenerContainers()) {
+            container.start();
+        }
+        aguardarQuantidade(madrugada, 2L);
+        assertThat(agregador.da(madrugada).getValorTotal()).isEqualByComparingTo("300.00");
     }
 
     private void aguardarQuantidade(Instant naJanelaDe, long esperada) {

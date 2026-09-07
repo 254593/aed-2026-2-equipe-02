@@ -1,6 +1,7 @@
 package br.pucminas.aed.pix.domain;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -24,6 +25,15 @@ public final class RealizacaoPixVO {
      */
     private final String eventoId;
 
+    /**
+     * QUANDO O PIX LIQUIDOU NO SPI, opcional. E o que define a competencia da
+     * tarifacao — "o mes de liquidadoEm, nunca a data de processamento"
+     * (docs/regra-de-tarifacao.md): um Pix liquidado em 31/07 e informado em
+     * 01/08 pertence a julho, e so o chamador sabe disso. Ausente, o servico
+     * usa o proprio relogio, o que so e correto para quem publica no ato.
+     */
+    private final Instant liquidadoEm;
+
     private final String idTransacaoPix;
     private final String idEmpresa;
     private final BigDecimal valor;
@@ -33,8 +43,23 @@ public final class RealizacaoPixVO {
     private final String endToEndId;
     private final String pagadorNome;
 
+    /** Sem liquidadoEm: o servico carimba o instante da chamada. */
+    public RealizacaoPixVO(String eventoId,
+                           String idTransacaoPix,
+                           String idEmpresa,
+                           BigDecimal valor,
+                           String chavePix,
+                           String tipoChave,
+                           String bancoDestino,
+                           String endToEndId,
+                           String pagadorNome) {
+        this(eventoId, null, idTransacaoPix, idEmpresa, valor, chavePix, tipoChave,
+                bancoDestino, endToEndId, pagadorNome);
+    }
+
     @JsonCreator
     public RealizacaoPixVO(@JsonProperty("eventoId") String eventoId,
+                           @JsonProperty("liquidadoEm") Instant liquidadoEm,
                            @JsonProperty("idTransacaoPix") String idTransacaoPix,
                            @JsonProperty("idEmpresa") String idEmpresa,
                            @JsonProperty("valor") BigDecimal valor,
@@ -44,6 +69,7 @@ public final class RealizacaoPixVO {
                            @JsonProperty("endToEndId") String endToEndId,
                            @JsonProperty("pagadorNome") String pagadorNome) {
         this.eventoId = eventoId;
+        this.liquidadoEm = liquidadoEm;
         this.idTransacaoPix = idTransacaoPix;
         this.idEmpresa = idEmpresa;
         this.valor = valor;
@@ -56,6 +82,10 @@ public final class RealizacaoPixVO {
 
     public String getEventoId() {
         return eventoId;
+    }
+
+    public Instant getLiquidadoEm() {
+        return liquidadoEm;
     }
 
     public String getIdTransacaoPix() {

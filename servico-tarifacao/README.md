@@ -411,6 +411,8 @@ justamente o bug que os testes 8 e 9 existem para pegar.
 | 14 | só o Pix isento consome franquia; o tarifado não |
 | 15 | a competência é isolada por mês: a franquia reinicia em setembro |
 | 16 | **o banco recusa valor negativo em `tarifa`** — o teto não reabre em silêncio |
+| 17 | **mensagem que não é JSON não trava a partição**: vai para `pagamentos.pix.realizado.v1.dlq` com os bytes originais, os `ce_*` e o motivo, e o Pix seguinte é processado |
+| 18 | `liquidado_em` volta do banco igual ao publicado, em qualquer fuso da JVM (`TIMESTAMP WITH TIME ZONE`) |
 
 ## Configuração relevante
 
@@ -420,4 +422,6 @@ justamente o bug que os testes 8 e 9 existem para pegar.
 | `spring.kafka.listener.ack-mode` | `manual_immediate` | o ack é explícito, depois do commit |
 | `spring.kafka.consumer.auto-offset-reset` | `earliest` | grupo novo lê o histórico do tópico |
 | `spring.json.use.type.headers` | `false` | a classe a usar é a **nossa**, não a do produtor |
+| `value-deserializer` | `ErrorHandlingDeserializer` (delegando ao `JsonDeserializer`) | carga malformada deixa de estourar dentro do `poll()` — que travava a partição em loop e enchia o log — e vira `DeserializationException` para o tratador de erro |
+| `tarifacao.retentativa.*` | 5 tentativas, backoff 1 s → 16 s | retentativa **em posição** (bloqueante, como a regra exige); esgotada, o registro vai para a **DLQ** `<tópico>.dlq`, na mesma partição, e o offset é confirmado. Desserialização não é retentada |
 | `metadata.max.age.ms` | `5000` | sem isso são 5 min de tela parada se o consumidor subir antes do tópico |
