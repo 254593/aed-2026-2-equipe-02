@@ -277,17 +277,58 @@ public class TarifacaoRepository {
      */
     public void registrarTarifa(String eventoId, PixRealizadoEvent evento,
             String competencia, DecisaoDeTarifacaoVO decisao) {
+
+        long versao = proximaVersao(evento.getIdEmpresa(), competencia);
+
         jdbc.update("INSERT INTO tarifa "
                         + "(evento_id, id_empresa, id_transacao_pix, competencia, "
-                        + " situacao, valor, liquidado_em) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        + " situacao, valor, liquidado_em, versao) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 eventoId,
                 evento.getIdEmpresa(),
                 evento.getIdTransacaoPix(),
                 competencia,
                 decisao.getSituacao().name(),
                 decisao.getValor(),
-                Timestamp.from(evento.getLiquidadoEm()));
+                Timestamp.from(evento.getLiquidadoEm()),
+                Long.valueOf(versao));
+    }
+
+    /**
+     * A proxima versao do stream (id_empresa, competencia) — ADR-005.
+     *
+     * E UM READ-THEN-WRITE, e o que o torna correto NAO esta aqui: esta na
+     * chave de particao. O servico-pix publica com idEmpresa como chave, entao
+     * todos os Pix de uma empresa caem na mesma particao e sao processados em
+     * serie por um unico consumidor do grupo. Ha um escritor por stream, por
+     * construcao, e o maximo lido nao envelhece entre o SELECT e o INSERT.
+     *
+     * O indice unico (id_empresa, competencia, versao) e a rede de seguranca, e
+     * nao o mecanismo. Se um dia houver dois escritores — a compensacao, com um
+     * orquestrador emitindo estornos enquanto Pix novos chegam pela particao —,
+     * os dois calculam a mesma versao aqui e o segundo leva
+     * DataIntegrityViolationException no INSERT. A transacao inteira volta,
+     * INCLUSIVE o registro em evento_processado, o offset nao e confirmado e o
+     * Kafka reentrega. Na reentrega o evento encontra um de dois estados: a
+     * gravacao concorrente comitou, e a deduplicacao por ce_id o descarta em
+     * silencio; ou nao comitou, e a versao e recalculada. Nao ha tratamento
+     * especial escrito para esse caso de proposito — ele cai no at-least-once
+     * que o servico ja tem.
+     *
+     * A alternativa seria um contador em outra tabela, incrementado por UPDATE.
+     * Seria a mesma coisa com uma linha de contencao a mais, e com o problema
+     * que este projeto ja evita na contagem de franquia: somar +1 nao e
+     * idempotente, e ler o maximo do proprio log e.
+     */
+    private long proximaVersao(String idEmpresa, String competencia) {
+        Long proxima = jdbc.queryForObject(
+                "SELECT COALESCE(MAX(versao), 0) + 1 FROM tarifa "
+                        + " WHERE id_empresa = ? AND competencia = ?",
+                Long.class, idEmpresa, competencia);
+        if (proxima == null) {
+            return 1L;
+        }
+        return proxima.longValue();
     }
 
     public void limparTarifas() {
