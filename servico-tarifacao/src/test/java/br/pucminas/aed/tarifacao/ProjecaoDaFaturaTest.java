@@ -302,6 +302,99 @@ class ProjecaoDaFaturaTest {
                 .isEqualTo(1L);
     }
 
+    /**
+     * O QUE O TESTE 5 NAO ALCANCA.
+     *
+     * La, os dois lados da comparacao partem de uma projecao inexistente: o
+     * avancar() inicial e o reconstruir() seguinte percorrem o mesmo caminho,
+     * sobre a mesma entrada. O caminho de ESCRITA SOBRE LINHA EXISTENTE — o que
+     * roda em toda passagem depois da primeira — nao ficava em nenhum dos dois.
+     *
+     * Aqui a projecao e construida em DUAS passagens, e a comparacao tem dois
+     * eixos: contra o replay do zero, e contra o LADO DE ESCRITA, que deriva os
+     * mesmos numeros da `tarifa` por conta propria. O segundo eixo e o que
+     * importa — comparar a projecao apenas consigo mesma e invariante a
+     * qualquer defeito deterministico do projetor, porque os dois lados usariam
+     * o mesmo codigo.
+     */
+    @Test
+    @DisplayName("11 - o avanco incremental concorda com a reconstrucao E com o lado de escrita")
+    void avancoIncrementalConcordaComAReconstrucao() {
+        processar("pix-1", EMPRESA_COM_TETO, "100.00", LIQUIDADO_EM);
+        processar("pix-2", EMPRESA_COM_TETO, "100.00", LIQUIDADO_EM);
+        projetor.avancar();
+
+        // segunda passagem: agora a linha da projecao JA EXISTE
+        processar("pix-3", EMPRESA_COM_TETO, "100.00", LIQUIDADO_EM);
+        processar("pix-4", EMPRESA_COM_TETO, "100.00", LIQUIDADO_EM);
+        processar("pix-sem", EMPRESA_SEM_CONTRATO, "100.00", LIQUIDADO_EM);
+        projetor.avancar();
+
+        FaturaDaCompetenciaVO incremental = fatura(EMPRESA_COM_TETO);
+
+        // eixo 1 — o oraculo independente
+        assertThat(incremental.getTotalTarifado()).isEqualByComparingTo(
+                repositorio.totalTarifadoNaCompetencia(EMPRESA_COM_TETO, COMPETENCIA));
+        assertThat(incremental.getQuantidadeDePix()).isEqualTo(
+                repositorio.contarPixNaCompetencia(EMPRESA_COM_TETO, COMPETENCIA));
+        for (SituacaoDaTarifaVO situacao : SituacaoDaTarifaVO.values()) {
+            assertThat(incremental.getQuantidadeDe(situacao))
+                    .as("quantidade de %s", situacao)
+                    .isEqualTo(repositorio.contarPorSituacao(
+                            EMPRESA_COM_TETO, COMPETENCIA, situacao));
+        }
+
+        // as tres saidas do teto: 10,00 + 10,00 cabem, o terceiro vira
+        // TETO_PARCIAL de 5,00 e o quarto sai TETO_ATINGIDO
+        assertThat(incremental.getTotalTarifado()).isEqualByComparingTo("25.00");
+        assertThat(incremental.getVersaoProjetada()).isEqualTo(4L);
+
+        // eixo 2 — o replay do zero chega ao mesmo estado
+        projetor.reconstruir();
+        FaturaDaCompetenciaVO reconstruida = fatura(EMPRESA_COM_TETO);
+
+        assertThat(reconstruida.getTotalTarifado())
+                .isEqualByComparingTo(incremental.getTotalTarifado());
+        assertThat(reconstruida.getQuantidadeDePix())
+                .isEqualTo(incremental.getQuantidadeDePix());
+        assertThat(reconstruida.getPorSituacao()).isEqualTo(incremental.getPorSituacao());
+        assertThat(reconstruida.getVersaoProjetada())
+                .isEqualTo(incremental.getVersaoProjetada());
+
+        assertThat(fatura(EMPRESA_SEM_CONTRATO).getQuantidadeDePix()).isEqualTo(1L);
+    }
+
+    /**
+     * A PROJECAO SE CURA, e e isto que substitui a marca d'agua como trava.
+     *
+     * Uma linha divergente — marca d'agua adiantada por restauracao parcial, ou
+     * total escrito a mao — some na passagem seguinte, porque o projetor grava o
+     * fold absoluto e nao confia no que estava la. Antes isto era o modo de
+     * falha permanente: com `HAVING MAX(versao) > versao_projetada`, uma marca
+     * d'agua ADIANTADA tirava o stream da descoberta para sempre.
+     */
+    @Test
+    @DisplayName("12 - projecao divergente do log e corrigida na passagem seguinte")
+    void projecaoDivergenteSeCura() {
+        processar("pix-1", EMPRESA_FRANQUIA_2, "100.00", LIQUIDADO_EM);
+        processar("pix-2", EMPRESA_FRANQUIA_2, "100.00", LIQUIDADO_EM);
+        projetor.avancar();
+        FaturaDaCompetenciaVO correta = fatura(EMPRESA_FRANQUIA_2);
+
+        // corrompe a linha: total errado e marca d'agua ADIANTADA em relacao ao log
+        jdbc.update("UPDATE fatura_competencia "
+                        + "   SET total_tarifado = 999.00, qtd_pix = 99, versao_projetada = 500 "
+                        + " WHERE id_empresa = ? AND competencia = ?",
+                EMPRESA_FRANQUIA_2, COMPETENCIA);
+
+        assertThat(projetor.avancar()).isEqualTo(1);
+
+        FaturaDaCompetenciaVO curada = fatura(EMPRESA_FRANQUIA_2);
+        assertThat(curada.getTotalTarifado()).isEqualByComparingTo(correta.getTotalTarifado());
+        assertThat(curada.getQuantidadeDePix()).isEqualTo(correta.getQuantidadeDePix());
+        assertThat(curada.getVersaoProjetada()).isEqualTo(correta.getVersaoProjetada());
+    }
+
     // ------------------------------------------------------------------
 
     private void processar(String idTransacaoPix, String idEmpresa, String valor,

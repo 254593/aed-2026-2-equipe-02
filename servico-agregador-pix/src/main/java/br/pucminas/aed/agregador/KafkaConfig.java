@@ -1,5 +1,6 @@
 package br.pucminas.aed.agregador;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 
@@ -114,13 +115,41 @@ public class KafkaConfig {
             public void onPartitionsAssigned(Consumer<?, ?> consumidor,
                                              Collection<TopicPartition> atribuidas) {
 
-                List<PartitionInfo> doTopico = consumidor.partitionsFor(topico);
-                if (doTopico == null) {
+                // ESTA GUARDA NAO PODE DERRUBAR O REBALANCE QUE ELA SO OBSERVA.
+                //
+                // partitionsFor(topico) sem prazo faz uma requisicao de Metadata
+                // BLOQUEANTE quando o topico nao esta no cache do cliente. Este
+                // callback roda na thread do consumidor, dentro do poll(): com
+                // metadata frio a chamada bloqueava ate default.api.timeout.ms
+                // (60 s) e entao lancava TimeoutException, que propagava para
+                // fora do poll() e abortava o join — o container refazia o
+                // rebalance, chamava o listener de novo, e podia entrar em laco.
+                // E o cenario que o application.yml ja antecipa para topico
+                // recem-criado, no comentario de metadata.max.age.ms.
+                //
+                // Com prazo curto e a excecao capturada, o pior caso passa a ser
+                // um rebalance sem conferencia, avisado no log.
+                final int total;
+                try {
+                    List<PartitionInfo> doTopico =
+                            consumidor.partitionsFor(topico, Duration.ofSeconds(5));
+                    if (doTopico == null || doTopico.isEmpty()) {
+                        return;
+                    }
+                    total = doTopico.size();
+                } catch (RuntimeException falha) {
+                    log.warn("nao foi possivel ler a contagem de particoes de {} neste "
+                            + "rebalance ({}). A guarda do ADR-003 fica sem conferir "
+                            + "desta vez; o consumo segue normal.", topico, falha.toString());
                     return;
                 }
 
-                int total = doTopico.size();
-                int minhas = atribuidas.size();
+                // assignment(), e nao atribuidas.size(): o argumento do callback
+                // traz a atribuicao INTEIRA so sob assignor eager. Sob rebalance
+                // cooperativo ele traz apenas as particoes recem-adicionadas, e
+                // uma instancia que detem as tres receberia 1 aqui — disparando
+                // um alarme de "agregacao parcial" que seria falso.
+                int minhas = consumidor.assignment().size();
 
                 if (minhas < total) {
                     log.warn("AGREGACAO PARCIAL: recebi {} de {} particoes de {}. "

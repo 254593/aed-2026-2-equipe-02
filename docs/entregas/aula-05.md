@@ -70,6 +70,13 @@ o teste passaria provando a coerência de um código que não é o que roda.
 próprio `DELETE`. Stream sem linha na projeção é tratado como `versao_projetada = 0`, então apagar a
 tabela faz o agendamento reconstruir tudo sozinho no ciclo seguinte.
 
+E esse `DELETE` é seguro **com o serviço no ar** porque o projetor grava o **fold absoluto** e
+atribui, em vez de somar delta: cada passagem recalcula o estado inteiro do stream a partir do log e
+não confia no que estava gravado. Duas passagens concorrentes escrevem o mesmo valor, e a última a
+vencer está certa. Enquanto o projetor somava delta sob uma marca d'água usada como trava, essa mesma
+operação podia gravar um total parcial como se fosse o total e o stream nunca era revisitado — o teste
+12 cobre justamente a cura de uma linha divergente.
+
 ---
 
 ## 4. A defasagem tolerada, por tela
@@ -154,10 +161,10 @@ e exige igualdade campo a campo — afirmando os valores concretos, R$ 25,00 e u
 ### Os testes
 
 ```bash
-mvn -f servico-tarifacao/pom.xml test     # 39 cenarios, sem Docker
+mvn -f servico-tarifacao/pom.xml test     # 41 cenarios, sem Docker
 ```
 
-Os onze novos:
+Os treze novos:
 
 | # | O que prova |
 |---|---|
@@ -171,7 +178,17 @@ Os onze novos:
 | 8 | reentrega não infla a projeção — 3 entregas, 1 Pix |
 | 9 | falha ao gravar o fato desfaz **também** a deduplicação, e o evento pode ser reprocessado |
 | 10 | o `schema.sql` pode rodar de novo sobre o banco já criado |
+| 11 | o avanço **incremental** concorda com a reconstrução **e com o lado de escrita** |
+| 12 | projeção divergente do log é corrigida na passagem seguinte |
 | — | `ProjetorAgendadoTest`: o projetor agendado projeta sem ninguém chamar |
+
+O 11 fecha um vão que o 5 não alcança: lá os dois lados da comparação partem de uma projeção
+inexistente, então ambos percorrem o caminho de primeira escrita. O 11 constrói a projeção em **duas
+passagens** — a segunda escrevendo sobre linha existente — e compara contra dois eixos: o replay do
+zero e o **lado de escrita**, que deriva os mesmos números da `tarifa` por conta própria
+(`totalTarifadoNaCompetencia`, `contarPixNaCompetencia`, `contarPorSituacao`). O segundo eixo é o que
+importa: comparar a projeção apenas consigo mesma é invariante a qualquer defeito determinístico do
+projetor, porque os dois lados usariam o mesmo código.
 
 O 9 vale uma nota: a corrida real de versão não se reproduz de forma determinística numa thread. A
 propriedade — "a transação inteira volta, inclusive a deduplicação" — é provocada pela constraint

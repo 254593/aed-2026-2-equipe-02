@@ -9,6 +9,7 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -59,6 +60,15 @@ import br.pucminas.aed.tarifacao.service.TarifacaoRepository;
         "spring.datasource.password=",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.kafka.consumer.auto-offset-reset=earliest",
+        // O AGENDADOR DO PROJETOR FICA DESLIGADO AQUI, e nao e detalhe: o
+        // @ConditionalOnProperty tem matchIfMissing = true, entao NAO declarar a
+        // flag o LIGA. Esta classe leva 18 s contra os 2 s de atraso inicial, e o
+        // projetor disparava varias vezes no meio dos cenarios enquanto o
+        // prepararEstado() limpava a `tarifa` e nao a `fatura_competencia`:
+        // marca d'agua de um teste sobrevivia para o seguinte. Nenhuma assercao
+        // desta classe le a projecao, entao a contaminacao era invisivel e a
+        // suite passava verde.
+        "tarifacao.projecao.agendada=false",
         "logging.level.br.pucminas.aed=INFO"
 })
 class IdempotenciaTest {
@@ -107,6 +117,9 @@ class IdempotenciaTest {
 
     @BeforeEach
     void prepararEstado() {
+        // Tudo que e DERIVADO da `tarifa` tem de ser limpo junto com ela, ou o
+        // estado de um teste vira estado inicial do proximo.
+        jdbc.update("DELETE FROM fatura_competencia");
         repositorio.limparTarifas();
         repositorio.limparEventosProcessados();
 
@@ -402,7 +415,19 @@ class IdempotenciaTest {
                 SituacaoDaTarifaVO.FAIXA.name(), new BigDecimal("-5.00"),
                 Timestamp.from(Instant.parse(LIQUIDADO_EM)), Long.valueOf(1L)))
                 .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("valor");
+                // CASA O NOME DA CONSTRAINT, e nao a palavra "valor". O
+                // AbstractFallbackSQLExceptionTranslator embute o SQL na
+                // mensagem, e o SQL acima lista a coluna `valor` — logo
+                // hasMessageContaining("valor") era satisfeito por QUALQUER
+                // violacao daquele INSERT: o NOT NULL de versao, o indice unico
+                // uq_tarifa_stream_versao, uma coluna futura. A assercao parecia
+                // uma guarda e nao guardava nada.
+                //
+                // Comparacao sem caixa porque o H2 devolve o identificador em
+                // maiuscula e o Postgres em minuscula, e este teste roda no H2
+                // enquanto producao roda no Postgres.
+                .satisfies(erro -> assertThat(erro.getMessage().toLowerCase(Locale.ROOT))
+                        .contains("tarifa_valor_nao_negativo"));
 
         assertThat(repositorio.contarPixNaCompetencia(EMPRESA_PLANO_PJ, COMPETENCIA))
                 .isEqualTo(0L);

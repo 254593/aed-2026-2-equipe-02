@@ -124,20 +124,52 @@ CREATE TABLE IF NOT EXISTS oferta_faixa (
 -- E indice unico, e nao ADD CONSTRAINT, porque `CREATE UNIQUE INDEX IF NOT
 -- EXISTS` e idempotente e este arquivo roda a cada subida da aplicacao.
 --
--- BANCO PREEXISTENTE: a coluna entra no CREATE TABLE, entao um banco criado
--- antes desta mudanca nao a recebe. Derrube com `docker compose down -v` e suba
--- de novo. Nao ha migracao com backfill aqui de proposito — inventar versao para
--- fatos historicos e escrever ordem que ninguem observou.
+-- A VERSAO E POSITIVA, E ISSO E CONSTRAINT E NAO CONVENCAO. O projetor usa 0
+-- como sentinela de "nada projetado ainda" (COALESCE(MAX(versao_projetada), 0)),
+-- entao um fato gravado com versao 0 seria ao mesmo tempo um fato real e a
+-- ausencia de fatos: a descoberta nunca o marcaria como pendente e a fatura o
+-- sub-reportaria para sempre, em silencio. Vale aqui a mesma doutrina do CHECK
+-- do valor, trinta linhas acima — invariante que depende de alguem ler o javadoc
+-- nao e invariante.
+--
+-- liquidado_em E `WITH TIME ZONE`. A competencia sai do liquidadoEm em UTC
+-- (TarifacaoService.competenciaDe), e uma coluna sem fuso guardava a hora de
+-- parede da JVM: um Pix de 2026-08-01T01:00:00Z num host em America/Sao_Paulo
+-- ia para o stream de 2026-08 com liquidado_em em 2026-07-31. A chave do stream
+-- e o timestamp da propria linha discordavam do mes, e o conteudo da tabela
+-- deixava de ser reproduzivel entre hosts.
 CREATE TABLE IF NOT EXISTS tarifa (
   evento_id        VARCHAR(64)   PRIMARY KEY,
   id_empresa       VARCHAR(32)   NOT NULL,
   id_transacao_pix VARCHAR(64)   NOT NULL,
   competencia      VARCHAR(7)    NOT NULL,  -- YYYY-MM, do liquidadoEm do evento
   situacao         VARCHAR(20)   NOT NULL,  -- SEM_CONTRATO|FRANQUIA|FAIXA|TETO_PARCIAL|TETO_ATINGIDO
-  valor            NUMERIC(10,2) NOT NULL CHECK (valor >= 0),
-  liquidado_em     TIMESTAMP     NOT NULL,
+  valor            NUMERIC(10,2) NOT NULL
+                     CONSTRAINT tarifa_valor_nao_negativo CHECK (valor >= 0),
+  liquidado_em     TIMESTAMP WITH TIME ZONE NOT NULL,
   versao           BIGINT        NOT NULL   -- ordem do fato no stream (id_empresa, competencia)
+                     CONSTRAINT tarifa_versao_positiva CHECK (versao > 0)
 );
+
+-- ---------------------------------------------------------------------------
+-- MIGRACAO PARA BANCO PREEXISTENTE — e ela precisa vir ANTES do indice unico.
+--
+-- `CREATE TABLE IF NOT EXISTS` e no-op num banco que ja tem a tabela, entao a
+-- coluna `versao` nao chegava; o `CREATE UNIQUE INDEX` abaixo entao referenciava
+-- coluna inexistente, levantava 42703 e, com `continue-on-error` no default
+-- false, o DataSourceScriptDatabaseInitializer DERRUBAVA a aplicacao na subida.
+-- Quem tinha o volume da aula 04 no disco nao subia mais.
+--
+-- A coluna entra NULLABLE de proposito. Inventar versao para fato historico e
+-- escrever ordem que ninguem observou; deixando nula, o fato continua no log e o
+-- `versao > ?` do projetor o exclui por semantica de SQL, sem caso especial. O
+-- fold conta esses fatos por COUNT(*), que e o que a descoberta compara.
+--
+-- Num banco novo a coluna ja existe com NOT NULL e o CHECK acima; num migrado
+-- ela e nullable e sem CHECK. A assimetria e o preco de nao ter Flyway, e esta
+-- aqui escrita em vez de descoberta em producao.
+-- ---------------------------------------------------------------------------
+ALTER TABLE tarifa ADD COLUMN IF NOT EXISTS versao BIGINT;
 
 CREATE INDEX IF NOT EXISTS idx_tarifa_empresa_competencia ON tarifa (id_empresa, competencia);
 
@@ -162,19 +194,46 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_tarifa_stream_versao
 -- o projetor reconstroi do zero e chega ao mesmo resultado. Se um dia apagar
 -- quebrar alguma coisa, a projecao deixou de ser cache.
 -- ---------------------------------------------------------------------------
+-- OS QUATRO ACUMULADORES DO CICLO, e nao dois. A `regra-de-tarifacao.md`, secao
+-- "Estado acumulado — CicloDeTarifacao", define quatro e afirma que "A fatura
+-- final e o liquido: valorTarifadoNaCompetencia - valorEstornadoNaCompetencia",
+-- marcando os dois de estorno como lidos por "apenas o fechamento" — isto e, por
+-- esta tabela. Sem coluna para eles, `total_tarifado` seria o BRUTO e a fatura
+-- superestimaria o liquido do contrato quando a saga da aula 06 entrasse, sem
+-- espaco no schema para corrigir.
+--
+-- Os dois entram agora, com DEFAULT 0, e ficam em zero ate a compensacao existir
+-- — o projetor nao os escreve. Nao e coluna morta: e a fronteira do agregado
+-- declarada no schema antes de haver dado, que e a unica hora em que isso e
+-- barato. Ver ADR-005, consequencia 10.
+--
+-- E os CHECKs. `tarifa.valor` carrega um com doze linhas de justificativa sobre
+-- monotonicidade, e nada disso valia para as colunas derivadas dele. Um valor
+-- negativo aqui significa projetor com defeito, e o banco passa a recusar.
 CREATE TABLE IF NOT EXISTS fatura_competencia (
-  id_empresa        VARCHAR(32)   NOT NULL,
-  competencia       VARCHAR(7)    NOT NULL,
-  total_tarifado    NUMERIC(12,2) NOT NULL,
-  qtd_pix           BIGINT        NOT NULL,
-  qtd_sem_contrato  BIGINT        NOT NULL,
-  qtd_franquia      BIGINT        NOT NULL,
-  qtd_faixa         BIGINT        NOT NULL,
-  qtd_teto_parcial  BIGINT        NOT NULL,
-  qtd_teto_atingido BIGINT        NOT NULL,
-  versao_projetada  BIGINT        NOT NULL,
+  id_empresa             VARCHAR(32)   NOT NULL,
+  competencia            VARCHAR(7)    NOT NULL,
+  total_tarifado         NUMERIC(12,2) NOT NULL CHECK (total_tarifado    >= 0),
+  total_estornado        NUMERIC(12,2) NOT NULL DEFAULT 0
+                                                CHECK (total_estornado   >= 0),
+  qtd_pix                BIGINT        NOT NULL CHECK (qtd_pix           >= 0),
+  qtd_sem_contrato       BIGINT        NOT NULL CHECK (qtd_sem_contrato  >= 0),
+  qtd_franquia           BIGINT        NOT NULL CHECK (qtd_franquia      >= 0),
+  qtd_faixa              BIGINT        NOT NULL CHECK (qtd_faixa         >= 0),
+  qtd_teto_parcial       BIGINT        NOT NULL CHECK (qtd_teto_parcial  >= 0),
+  qtd_teto_atingido      BIGINT        NOT NULL CHECK (qtd_teto_atingido >= 0),
+  qtd_franquia_estornada BIGINT        NOT NULL DEFAULT 0
+                                                CHECK (qtd_franquia_estornada >= 0),
+  versao_projetada       BIGINT        NOT NULL CHECK (versao_projetada  >= 0),
   PRIMARY KEY (id_empresa, competencia)
 );
+
+-- Mesma razao do ALTER da `tarifa`: num banco preexistente o CREATE acima e
+-- no-op e as duas colunas de estorno nao chegariam.
+ALTER TABLE fatura_competencia
+  ADD COLUMN IF NOT EXISTS total_estornado NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE fatura_competencia
+  ADD COLUMN IF NOT EXISTS qtd_franquia_estornada BIGINT NOT NULL DEFAULT 0;
 
 -- ---------------------------------------------------------------------------
 -- Carga de exemplo. Dados FICTICIOS: o repositorio e publico.
