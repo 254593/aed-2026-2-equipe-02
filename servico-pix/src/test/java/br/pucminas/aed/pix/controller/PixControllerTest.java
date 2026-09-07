@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.mock.http.MockHttpInputMessage;
 
 import br.pucminas.aed.pix.domain.PixRealizadoEvent;
 import br.pucminas.aed.pix.domain.RealizacaoPixVO;
@@ -50,5 +52,22 @@ class PixControllerTest {
         java.util.Map<String, String> corpo = (java.util.Map<String, String>) resposta.getBody();
         assertThat(corpo).containsKey("erro");
         assertThat(corpo.get("erro")).isEqualTo("idTransacaoPix e obrigatorio");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("responde 400 com o motivo quando o corpo nao pode ser lido")
+    void responde400ComMotivoQuandoCorpoEhIlegivel() {
+        PixController controller = new PixController(mock(PixService.class));
+        HttpMessageNotReadableException excecao = new HttpMessageNotReadableException(
+                "JSON parse error",
+                new IllegalStateException("Unrecognized field \"liquidadoEn\"\n at [Source: ...]"),
+                new MockHttpInputMessage(new byte[0]));
+
+        ResponseEntity<?> resposta = controller.tratarCorpoIlegivel(excecao);
+
+        assertThat(resposta.getStatusCode().value()).isEqualTo(400);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, String> corpo = (java.util.Map<String, String>) resposta.getBody();
+        assertThat(corpo.get("erro")).isEqualTo("corpo invalido: Unrecognized field \"liquidadoEn\"");
     }
 }
