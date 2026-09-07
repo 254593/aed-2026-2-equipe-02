@@ -154,7 +154,7 @@ e exige igualdade campo a campo — afirmando os valores concretos, R$ 25,00 e u
 ### Os testes
 
 ```bash
-mvn -f servico-tarifacao/pom.xml test     # 39 cenarios, sem Docker
+mvn -f servico-tarifacao/pom.xml test     # 41 cenarios, sem Docker
 ```
 
 Os onze novos:
