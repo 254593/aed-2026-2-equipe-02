@@ -96,6 +96,33 @@ das janelas mora em memória, e um reinício comum reconstrói tudo pelo log sem
 Detalhes em [servico-agregador-pix/README.md](servico-agregador-pix/README.md); as decisões de
 relógio e janela, em [docs/entregas/aula-03.md](docs/entregas/aula-03.md).
 
+## Aula 05: projeção da fatura
+
+O serviço de tarifação mantém os fatos na tabela `tarifa`, organizados por empresa, competência e
+versão. A tabela `fatura_competencia` é uma projeção descartável, atualizada pelo projetor a cada
+dois segundos.
+
+Para conferir o log e a projeção:
+
+```bash
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c \
+   "SELECT id_empresa, competencia, versao, situacao, valor FROM tarifa ORDER BY id_empresa, competencia, versao;"
+
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c \
+   "SELECT id_empresa, competencia, total_tarifado, qtd_pix, versao_projetada FROM fatura_competencia ORDER BY 1, 2;"
+```
+
+O replay pode ser demonstrado apagando somente a projeção. O projetor a reconstrói a partir dos fatos
+do log, sem apagar a tabela `tarifa`:
+
+```bash
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c \
+   "DELETE FROM fatura_competencia;"
+```
+
+Depois de alguns segundos, a consulta da projeção deve voltar ao mesmo resultado. Para executar os
+testes da entrega, use `mvn -f servico-tarifacao/pom.xml test`.
+
 ## Troubleshooting
 
 - Se o Kafka ainda não estiver pronto, o consumidor pode mostrar `UNKNOWN_TOPIC_OR_PARTITION` por alguns segundos; normalmente resolve sozinho.
