@@ -89,11 +89,39 @@ mvn -f servico-agregador-pix/pom.xml spring-boot:run
 | Saída | log, com a janela atualizada, partição e offset |
 
 Os dois consumidores rodam ao mesmo tempo e **nenhum rouba mensagem do outro**: grupos diferentes
-têm ponteiros de leitura independentes. O agregador lê o tópico desde o início
-(`auto-offset-reset: earliest`), então encontra o histórico mesmo subindo depois.
+têm ponteiros de leitura independentes. O agregador lê o tópico desde o início **a cada subida**
+(`seekToBeginning` na atribuição das partições, além do `auto-offset-reset: earliest`): o estado
+das janelas mora em memória, e um reinício comum reconstrói tudo pelo log sem apagar o grupo.
 
 Detalhes em [servico-agregador-pix/README.md](servico-agregador-pix/README.md); as decisões de
 relógio e janela, em [docs/entregas/aula-03.md](docs/entregas/aula-03.md).
+
+## Aula 05: projeção da fatura
+
+O serviço de tarifação mantém os fatos na tabela `tarifa`, organizados por empresa, competência e
+versão. A tabela `fatura_competencia` é uma projeção descartável, atualizada pelo projetor a cada
+dois segundos.
+
+Para conferir o log e a projeção:
+
+```bash
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c \
+   "SELECT id_empresa, competencia, versao, situacao, valor FROM tarifa ORDER BY id_empresa, competencia, versao;"
+
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c \
+   "SELECT id_empresa, competencia, total_tarifado, qtd_pix, versao_projetada FROM fatura_competencia ORDER BY 1, 2;"
+```
+
+O replay pode ser demonstrado apagando somente a projeção. O projetor a reconstrói a partir dos fatos
+do log, sem apagar a tabela `tarifa`:
+
+```bash
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c \
+   "DELETE FROM fatura_competencia;"
+```
+
+Depois de alguns segundos, a consulta da projeção deve voltar ao mesmo resultado. Para executar os
+testes da entrega, use `mvn -f servico-tarifacao/pom.xml test`.
 
 ## Troubleshooting
 
@@ -129,6 +157,7 @@ O publicador envia um objeto `RealizacaoPixVO` com os campos essenciais:
 - `valor` — obrigatório e maior que zero
 - `chavePix`, `tipoChave`, `bancoDestino`, `endToEndId`, `pagadorNome` — opcionais, mas importantes para o rastreio do evento
 - `eventoId` — opcional; se informado, vira a identidade do fato e garante idempotência
+- `liquidadoEm` — opcional, ISO-8601, não pode estar no futuro; é o instante em que o Pix liquidou no SPI e define a **competência**. Omitido, o serviço usa o próprio relógio, o que só é correto para quem publica no ato da liquidação
 
 O evento publicado no Kafka tem cabeçalhos CloudEvents:
 
@@ -328,12 +357,13 @@ Roda com Kafka embutido e H2 — **sem Docker e sem o `servico-pix`**:
 mvn -f servico-tarifacao/pom.xml test
 ```
 
-Quarenta e um cenários. Dezesseis no `IdempotenciaTest`, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
+Quarenta e três cenários. Dezoito no `IdempotenciaTest`, cobrindo a idempotência e as cinco saídas da política: **o mesmo evento entregue
 3x produz efeito 1x** · consumidor tolerante a campos desconhecidos · `ce_id` ausente · mesmo
 `idTransacaoPix` com `eventoId` distintos · isenção por franquia · a faixa de valor, com a fronteira
 exclusiva · empresa sem contrato não é cobrada · contrato encerrado · troca de plano respeitando a
 competência do evento · o estouro do teto cobrado parcialmente · só o isento consome franquia ·
-isolamento por competência. A tabela completa está em
+isolamento por competência · **mensagem que não é JSON vai para a DLQ sem travar a partição** ·
+`liquidado_em` não depende do fuso da JVM. A tabela completa está em
 [servico-tarifacao/README.md](servico-tarifacao/README.md#rodar).
 
 O `servico-pix` tem a própria bateria (`mvn -f servico-pix/pom.xml test`): ISO-8601 no fio, tópico

@@ -5,6 +5,15 @@ tarifacao:
   # enunciado lista como facil de evitar.
   topico: pagamentos.pix.realizado.v1
 
+  # Retentativa EM POSICAO (bloqueante, ver docs/regra-de-tarifacao.md) com
+  # backoff exponencial: 1s, 2s, 4s, 8s, 16s. Esgotada, o registro vai para
+  # o topico <topico>.dlq e a particao segue. Erro de desserializacao nao e
+  # retentado: vai direto para a DLQ.
+  retentativa:
+    maximo: 5
+    intervalo-inicial-ms: 1000
+    intervalo-maximo-ms: 16000
+
 spring:
   application:
     name: servico-tarifacao
@@ -29,8 +38,13 @@ spring:
       auto-offset-reset: earliest
       enable-auto-commit: false       # quem confirma o offset e o nosso codigo
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      # ErrorHandlingDeserializer envolve o JsonDeserializer: carga malformada
+      # deixa de estourar dentro do poll() — que travava a particao em loop e
+      # enchia o log — e vira DeserializationException entregue ao tratador de
+      # erro do KafkaConfig, que a manda para a DLQ sem retentativa.
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         # Ignora o cabecalho de tipo que o produtor eventualmente mande: a
         # classe a usar e a NOSSA. E o que permite aos dois servicos terem
         # classes diferentes para o mesmo evento.

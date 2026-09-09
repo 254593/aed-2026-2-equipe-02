@@ -8,12 +8,16 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.awaitility.Awaitility;
@@ -25,10 +29,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.context.TestPropertySource;
 
 import br.pucminas.aed.tarifacao.domain.SituacaoDaTarifaVO;
@@ -52,7 +58,7 @@ import br.pucminas.aed.tarifacao.service.TarifacaoRepository;
  * e 9 existem para pegar.
  */
 @SpringBootTest
-@EmbeddedKafka(partitions = 3, topics = "pagamentos.pix.realizado.v1")
+@EmbeddedKafka(partitions = 3, topics = { "pagamentos.pix.realizado.v1", "pagamentos.pix.realizado.v1.dlq" })
 @TestPropertySource(properties = {
         "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
         "spring.datasource.url=jdbc:h2:mem:tarifacao;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
@@ -477,6 +483,65 @@ class IdempotenciaTest {
     // ------------------------------------------------------------------
     // apoio
     // ------------------------------------------------------------------
+
+    // ------------------------------------------------------------------
+    // o que acontece com a mensagem que NAO da para processar
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("17 - mensagem que nao e JSON nao trava a particao: vai para a DLQ e o Pix seguinte e processado")
+    void mensagemMalformadaVaiParaADlqSemTravarAParticao() {
+        // Antes do ErrorHandlingDeserializer, esta mensagem estourava dentro do
+        // poll(), o container repetia o poll no mesmo offset para sempre e a
+        // particao inteira (todas as empresas dela) parava atras do veneno.
+        String veneno = "{isto nao e json";
+        enviar(veneno, "veneno-001", EMPRESA_PLANO_PJ, LIQUIDADO_EM);
+
+        // um Pix valido ATRAS do veneno, na mesma particao (mesma chave)
+        publicar(UUID.randomUUID().toString(), "pix-1701", EMPRESA_PLANO_PJ);
+        aguardarQuantidadeDeTarifas(EMPRESA_PLANO_PJ, 1);
+        assertThat(repositorio.contarEventosProcessados())
+                .as("o veneno nao passou pela deduplicacao nem virou tarifa")
+                .isEqualTo(1L);
+
+        // e o veneno nao foi descartado em silencio: esta na DLQ, com os bytes
+        // originais, os cabecalhos ce_* e o motivo
+        try (Consumer<byte[], byte[]> consumidor = consumidorDaDlq()) {
+            ConsumerRecord<byte[], byte[]> morto = KafkaTestUtils.getSingleRecord(
+                    consumidor, TOPICO + KafkaConfig.SUFIXO_DLQ, Duration.ofSeconds(10));
+            assertThat(new String(morto.value(), UTF_8)).isEqualTo(veneno);
+            assertThat(new String(morto.headers().lastHeader("ce_id").value(), UTF_8))
+                    .isEqualTo("veneno-001");
+            assertThat(new String(morto.headers().lastHeader("kafka_dlt-exception-fqcn").value(), UTF_8))
+                    .contains("DeserializationException");
+            assertThat(new String(morto.headers().lastHeader("kafka_dlt-original-topic").value(), UTF_8))
+                    .isEqualTo(TOPICO);
+        }
+    }
+
+    @Test
+    @DisplayName("18 - o instante de liquidacao volta do banco igual ao publicado, em qualquer fuso da JVM")
+    void liquidadoEmNaoDependeDoFusoDaJvm() {
+        // Com TIMESTAMP sem fuso, um Pix liquidado as 02:00Z de 1o de setembro
+        // era gravado como 31/08 23:00 (UTC-3) ao lado de competencia='2026-09'.
+        String eventoId = UUID.randomUUID().toString();
+        String viradaDoMes = "2026-09-01T02:00:00.000Z";
+        publicarEm(eventoId, "pix-1801", EMPRESA_PLANO_PJ, viradaDoMes, VALOR_PADRAO);
+        aguardarQuantidadeDeTarifas(EMPRESA_PLANO_PJ, 1, COMPETENCIA_SETEMBRO);
+
+        OffsetDateTime gravado = jdbc.queryForObject(
+                "SELECT liquidado_em FROM tarifa WHERE evento_id = ?",
+                OffsetDateTime.class, eventoId);
+        assertThat(gravado.toInstant()).isEqualTo(Instant.parse(viradaDoMes));
+    }
+
+    private Consumer<byte[], byte[]> consumidorDaDlq() {
+        Map<String, Object> config = KafkaTestUtils.consumerProps(servidores, "dlq-" + UUID.randomUUID(), "true");
+        Consumer<byte[], byte[]> consumidor = new DefaultKafkaConsumerFactory<byte[], byte[]>(
+                config, new ByteArrayDeserializer(), new ByteArrayDeserializer()).createConsumer();
+        consumidor.subscribe(java.util.List.of(TOPICO + KafkaConfig.SUFIXO_DLQ));
+        return consumidor;
+    }
 
     private void publicar(String eventoId, String idTransacaoPix, String idEmpresa) {
         publicarEm(eventoId, idTransacaoPix, idEmpresa, LIQUIDADO_EM, VALOR_PADRAO);

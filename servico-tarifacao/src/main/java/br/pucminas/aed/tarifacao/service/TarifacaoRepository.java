@@ -1,7 +1,6 @@
 package br.pucminas.aed.tarifacao.service;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -291,12 +290,12 @@ public class TarifacaoRepository {
                 competencia,
                 decisao.getSituacao().name(),
                 decisao.getValor(),
-                // Em UTC, explicitamente, e nao Timestamp.from(): o driver
-                // converteria o Instant usando o fuso default da JVM, e a
-                // competencia do stream sai de UTC. Os dois precisam concordar
-                // sobre o mes, ou o replay por versao e a reconciliacao por
-                // liquidado_em passam a ver conjuntos de fatos diferentes.
-                OffsetDateTime.ofInstant(evento.getLiquidadoEm(), ZoneOffset.UTC),
+                // Em UTC, explicitamente, e nao Timestamp.from(): numa coluna
+                // sem fuso o driver gravava a hora local da JVM, e a competencia
+                // do stream sai de UTC. Os dois precisam concordar sobre o mes,
+                // ou o replay por versao e a reconciliacao por liquidado_em
+                // passam a ver conjuntos de fatos diferentes.
+                evento.getLiquidadoEm().atOffset(ZoneOffset.UTC),
                 Long.valueOf(versao));
     }
 

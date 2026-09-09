@@ -66,7 +66,11 @@ No Windows, `scripts\publicar-pix.ps1` tem os mesmos parâmetros. Os comandos `c
 - três partições, declaradas pelo bean `NewTopic`;
 - `ce_source`: `/pagamentos/servico-pix`;
 - `ce_id`: igual ao `eventoId` do evento — o informado no request, ou o gerado pelo serviço;
-- `ce_time` e `liquidadoEm`: ISO-8601.
+- `ce_time` e `liquidadoEm`: ISO-8601. O `liquidadoEm` é o informado no request — quem sabe quando o
+  SPI liquidou é o chamador — ou, se omitido, o relógio do serviço no instante da chamada; no futuro
+  é recusado com 400.
+- corpo que não pode ser lido (campo desconhecido, data fora do ISO-8601, JSON quebrado) responde
+  400 com o motivo em `erro`, como os demais erros de validação.
 
 O retorno de `KafkaTemplate.send()` pertence a `ResultadoPublicacaoListener`, que registra
 sucesso ou falha de publicação. O serviço não possui banco nesta etapa.

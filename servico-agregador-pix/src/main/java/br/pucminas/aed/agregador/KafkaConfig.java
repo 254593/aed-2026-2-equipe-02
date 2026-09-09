@@ -114,6 +114,19 @@ public class KafkaConfig {
             @Override
             public void onPartitionsAssigned(Consumer<?, ?> consumidor,
                                              Collection<TopicPartition> atribuidas) {
+                // O estado das janelas mora em memoria e o log e a fonte da
+                // verdade — entao TODA subida reconstroi pelo log, desde o
+                // inicio. Sem este seek, `auto-offset-reset: earliest` so
+                // valeria para um grupo SEM offset confirmado: um reinicio comum
+                // retomava do ultimo offset com o mapa vazio e devolvia totais
+                // parciais sem nenhum sinal (medido: uma janela de 24 Pix
+                // reaparecia com 1). A deduplicacao por eventoId torna o replay
+                // seguro tambem num rebalanceamento sem reinicio.
+                if (!atribuidas.isEmpty()) {
+                    consumidor.seekToBeginning(atribuidas);
+                    log.info("reconstruindo as janelas pelo log desde o inicio de {} particao(oes)",
+                            Integer.valueOf(atribuidas.size()));
+                }
 
                 // ESTA GUARDA NAO PODE DERRUBAR O REBALANCE QUE ELA SO OBSERVA.
                 //

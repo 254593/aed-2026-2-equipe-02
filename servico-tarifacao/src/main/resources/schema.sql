@@ -111,8 +111,7 @@ CREATE TABLE IF NOT EXISTS oferta_faixa (
 -- disciplinasse, livre para divergir em silencio.
 --
 -- A versao e a ORDEM LOGICA do fato dentro do stream, e e por ela que o replay
--- percorre o historico — nunca por liquidado_em, que e dado e nao indice (e que,
--- alem disso, e gravado no fuso default da JVM numa coluna sem time zone).
+-- percorre o historico — nunca por liquidado_em, que e dado e nao indice.
 --
 -- O INDICE UNICO E O MECANISMO DE DETECCAO DE ESCRITA CONCORRENTE. Hoje existe
 -- um escritor por empresa, garantido pela chave de particao do ADR-003, entao
@@ -138,6 +137,13 @@ CREATE TABLE IF NOT EXISTS oferta_faixa (
 -- ia para o stream de 2026-08 com liquidado_em em 2026-07-31. A chave do stream
 -- e o timestamp da propria linha discordavam do mes, e o conteudo da tabela
 -- deixava de ser reproduzivel entre hosts.
+--
+-- BANCO PREEXISTENTE, e a assimetria e so uma: a coluna `versao` chega pelo
+-- ALTER TABLE logo abaixo do CREATE, mas o TIPO de liquidado_em nao muda —
+-- `CREATE TABLE IF NOT EXISTS` e no-op e nao ha ALTER de tipo aqui, de proposito,
+-- porque converter a coluna reinterpretaria fatos ja gravados no fuso em que
+-- foram gravados. Num banco criado antes desta mudanca, liquidado_em continua
+-- sem fuso: para ter o tipo novo, `docker compose down -v` e suba de novo.
 CREATE TABLE IF NOT EXISTS tarifa (
   evento_id        VARCHAR(64)   PRIMARY KEY,
   id_empresa       VARCHAR(32)   NOT NULL,

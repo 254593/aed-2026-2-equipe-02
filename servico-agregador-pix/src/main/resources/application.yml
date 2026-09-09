@@ -21,9 +21,11 @@ spring:
     consumer:
       group-id: ${pix.agregador.group-id}
       # earliest, e nao latest: um grupo NOVO precisa enxergar o historico do
-      # topico. Sem isso o agregador so veria o que chegasse depois de ele subir
-      # — e a afirmacao de que reprocessar do inicio reproduz o mesmo resultado
-      # (docs/entregas/aula-03.md, pergunta 4) nao teria como ser verdade.
+      # topico. Mas earliest so vale para grupo SEM offset confirmado — quem
+      # garante que um REINICIO tambem releia tudo e o seekToBeginning feito
+      # no KafkaConfig a cada atribuicao de particoes. E o que torna verdade a
+      # afirmacao de que reprocessar do inicio reproduz o mesmo resultado
+      # (docs/entregas/aula-03.md, pergunta 4).
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 

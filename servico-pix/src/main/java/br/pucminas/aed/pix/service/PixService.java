@@ -56,7 +56,7 @@ public class PixService {
 
         PixRealizadoEvent evento = new PixRealizadoEvent(
                 identidadeDe(realizacao),
-                Instant.now(relogio),
+                liquidacaoDe(realizacao),
                 realizacao.getIdTransacaoPix(),
                 realizacao.getIdEmpresa(),
                 realizacao.getValor(),
@@ -88,6 +88,19 @@ public class PixService {
      * Gerar quando ausente mantem o caminho simples funcionando: quem nao se
      * importa com retry nao precisa saber que a chave existe.
      */
+    /**
+     * O instante da liquidacao vem do chamador, que e quem sabe quando o SPI
+     * liquidou. O relogio local e apenas o fallback para quem publica no ato:
+     * um Pix liquidado em 31/07 e informado em 01/08 pertence a julho, e so o
+     * chamador pode dizer isso.
+     */
+    private Instant liquidacaoDe(RealizacaoPixVO realizacao) {
+        if (realizacao.getLiquidadoEm() != null) {
+            return realizacao.getLiquidadoEm();
+        }
+        return Instant.now(relogio);
+    }
+
     private String identidadeDe(RealizacaoPixVO realizacao) {
         if (realizacao.getEventoId() != null && !realizacao.getEventoId().isBlank()) {
             return realizacao.getEventoId();
@@ -123,6 +136,10 @@ public class PixService {
         if (realizacao.getValor() == null
                 || realizacao.getValor().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("valor deve ser maior que zero");
+        }
+        if (realizacao.getLiquidadoEm() != null
+                && realizacao.getLiquidadoEm().isAfter(Instant.now(relogio))) {
+            throw new IllegalArgumentException("liquidadoEm nao pode estar no futuro");
         }
     }
 }

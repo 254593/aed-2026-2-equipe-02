@@ -84,14 +84,17 @@ mão, pelo `kafka-console-consumer`, qual mensagem entrou em qual janela:
                                     ->  janela [2026-08-23T14:00:00Z, 2026-08-23T15:00:00Z) | R$ 300.50 | 2 Pix
 ```
 
-Para reprocessar do zero e conferir que o resultado se repete:
+Para reprocessar do zero e conferir que o resultado se repete, basta **reiniciar o agregador**: a
+cada atribuição de partições ele faz `seekToBeginning` e relê o tópico inteiro — o estado mora em
+memória e o log é a fonte da verdade. O `auto-offset-reset: earliest` sozinho não bastava: vale só
+para grupo sem offset confirmado, e um reinício comum retomava do último offset com o mapa vazio,
+devolvendo totais parciais sem nenhum sinal (o teste 8 reproduz e exige o contrário). Apagar o grupo
+continua funcionando, mas deixou de ser necessário:
 
 ```bash
 docker exec e02-kafka /opt/kafka/bin/kafka-consumer-groups.sh \
   --bootstrap-server kafka:9094 --delete --group agregador-pix-por-hora
 ```
-
-(com o agregador parado; depois é só subir de novo)
 
 ---
 
@@ -155,6 +158,7 @@ não existe.
 | 5 | **o retardatário soma na janela dele, sem reiniciar a contagem** |
 | 6 | campos não declarados são ignorados |
 | 7 | **usa event time**: três Pix que chegam juntos, liquidados em horas distintas, viram três janelas |
+| 8 | **reiniciar o consumidor reconstrói as janelas pelo log**, mesmo com o offset já confirmado |
 | `JanelaDeHoraVOTest` | alinhamento na hora cheia, fim exclusivo, cálculo determinístico |
 | `AgregacaoPorHoraVOTest` | imutabilidade; valor nulo soma zero mas conta como Pix |
 
