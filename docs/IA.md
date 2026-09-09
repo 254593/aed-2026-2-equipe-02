@@ -652,9 +652,96 @@ próprio javadoc condena três linhas acima.
 
 ---
 
+## Aula 05
+
+### Allainn Christiam (254337) — revisão do event store, da projeção e da migração
+
+Ferramenta: Claude Code (Claude Opus 5). Interações de 06/09/2026.
+
+---
+
+#### 1. A ADR-005 que eu gerei e depois joguei fora
+
+**Pedido.** Escrever a `ADR-005` escolhendo o agregado a ser persistido por Event Sourcing, a partir
+dos materiais da aula e do estado do repositório.
+
+**Sugerido.** A ferramenta produziu uma ADR completa escolhendo o `CicloDeTarifacao`
+(`idEmpresa` + competência) como agregado, com stream `ciclo-{empresa}-{competência}`, event store
+relacional com unicidade em `(stream, versao)` e uma projeção de extrato. Argumentação: auditoria é
+requisito regulado, o estorno é fato de negócio, e o determinismo da fatura depende de cinco
+condições do transporte.
+
+**RECUSADA — a minha, em favor da do Evandro.** Ao trazer a branch dele, apareceu que ele havia
+chegado ao **mesmo agregado** de forma independente, e com fundamentação melhor: a ADR dele mostra
+que o código **já** calculava estado como *fold* do log sem chamar assim — `contarFranquiaConsumida()`
+é um `COUNT` e `totalTarifadoNaCompetencia()` é um `SUM`, ambos sobre a `tarifa`, e o javadoc já
+registrava a razão (*"contar linhas é naturalmente idempotente, somar +1 não"*). A minha ADR
+argumentava de fora para dentro, a dele de dentro para fora. Duas ADR-005 no mesmo repositório
+seriam duas fontes da verdade sobre a mesma decisão, que é exatamente o que uma ADR existe para
+evitar.
+
+**Aceito.** A ADR-005 do repositório é a do Evandro. A minha ficou numa branch descartada, e o que
+sobrou dela virou insumo de review. A convergência entre duas análises independentes é o argumento
+mais forte a favor da decisão — e não teria aparecido se eu tivesse aceitado a primeira resposta
+como definitiva.
+
+---
+
+#### 2. "Derrube o volume com `docker compose down -v`" — RECUSADO
+
+**Pedido.** Revisar por que a aplicação não subia num banco que já existia desde a aula 04.
+
+**Sugerido.** O comentário do `schema.sql`, escrito pela ferramenta junto com a coluna `versao`,
+declarava o procedimento: *"BANCO PREEXISTENTE: a coluna entra no CREATE TABLE, entao um banco criado
+antes desta mudanca nao a recebe. Derrube com `docker compose down -v` e suba de novo. Nao ha
+migracao com backfill aqui de proposito — inventar versao para fatos historicos e escrever ordem que
+ninguem observou."*
+
+**RECUSADO.** O argumento contra **fabricar** versão para fato histórico é correto; ele não é
+argumento para **apagar o fato**. E a consequência 7 da própria ADR-005 afirma que o log não pode ser
+expurgado, com prazo de guarda fiscal — as duas coisas não convivem. Havia ainda o efeito prático que
+o comentário subestimava: não era "não recebe a coluna", era o `CREATE UNIQUE INDEX` logo abaixo
+referenciando coluna inexistente, `continue-on-error` no default `false`, e o
+`DataSourceScriptDatabaseInitializer` **derrubando a aplicação na subida**. Quem tivesse o volume da
+aula 04 no disco simplesmente não rodava mais o projeto.
+
+**Aceito, com a alternativa.** `ALTER TABLE tarifa ADD COLUMN IF NOT EXISTS versao BIGINT;` — **nullable**,
+antes do índice. Não inventa versão nenhuma, preserva o log, e o `versao > ?` do projetor exclui NULL
+por semântica de SQL, sem caso especial. O teste 10 (`o schema.sql pode rodar de novo sobre o banco
+já criado`) passou a cobrir isso. A ADR-005 foi corrigida no mesmo passo: o SQL que ela exibia
+(`ADD COLUMN versao BIGINT NOT NULL`) não existia em arquivo algum e falharia em Postgres contra
+tabela não vazia.
+
+---
+
+#### 3. "Limite a descoberta a uma janela de competências" — RECUSADO por ora
+
+**Pedido.** A query que descobre streams pendentes agrega a `tarifa` inteira a cada 2 segundos, para
+sempre, numa tabela que a ADR declara não expurgável. Como reduzir.
+
+**Sugerido.** Restringir a descoberta por uma janela — algo como `WHERE t.competencia >= ?` — para
+que o custo do tick ficasse proporcional à atividade e não ao histórico.
+
+**RECUSADO.** A janela troca CPU por uma garantia de domínio que está escrita na entrega da aula 03:
+*"Qualquer retardatário é aceito, por mais tarde que chegue"*, e nenhum evento é descartado. Um Pix
+liquidado em agosto que chegue em outubro precisa ser projetado na competência de agosto; com janela,
+ele nunca seria descoberto — e a falha seria **silenciosa**, que é a pior classe de defeito deste
+projeto inteiro. Otimizar leitura ao custo de perder fato é exatamente o que o `CHECK (valor >= 0)`
+da `tarifa` existe para impedir em outro lugar.
+
+**Aceito em parte.** A query foi reescrita para que o agregado por stream possa ser servido pelo
+índice `uq_tarifa_stream_versao`, e a comparação passou de `>` para `<>` — o que corrige um bug
+separado, em que uma marca d'água **adiantada** tirava o stream da descoberta para sempre. O custo
+proporcional ao histórico continua, registrado como dívida: a saída correta é uma marca de stream
+sujo escrita no `registrarTarifa`, e ela entra na aula 06 junto com a compensação, que é quando o
+projetor vai ser mexido de qualquer forma.
+
+---
+
 <!--
-  Demais integrantes: acrescentem a sua subseção da Aula 05 abaixo, no mesmo
-  formato (### Nome (matrícula) — parte pela qual respondeu).
+  Demais integrantes: acrescentem a sua subseção da Aula 05 acima desta linha, no
+  mesmo formato (### Nome (matrícula) — parte pela qual respondeu).
   A rubrica pede TRÊS interações com ao menos UMA recusa justificada POR
-  INTEGRANTE — as seções acima cobrem apenas um.
+  INTEGRANTE — a Aula 04 cobre apenas o Evandro e a Aula 05, apenas o Allainn.
+  Faltam: Amanda, Alexsander, Guilherme, Jhonathan e Samuel.
 -->

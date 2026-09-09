@@ -57,10 +57,27 @@ deste sistema.** A fronteira é a competência, escopo das duas invariantes do c
 **Nós formalizamos a `tarifa` como event store desse agregado**, com uma coluna e uma constraint:
 
 ```sql
-ALTER TABLE tarifa ADD COLUMN versao BIGINT NOT NULL;
+-- banco novo: a coluna nasce no CREATE TABLE, com NOT NULL e CHECK
+versao BIGINT NOT NULL CONSTRAINT tarifa_versao_positiva CHECK (versao > 0)
+
+-- banco preexistente: entra NULLABLE, e a migração precede o índice
+ALTER TABLE tarifa ADD COLUMN IF NOT EXISTS versao BIGINT;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tarifa_stream_versao
     ON tarifa (id_empresa, competencia, versao);
 ```
+
+A coluna entra **nullable** na migração, e não `NOT NULL`: inventar versão para
+fato histórico é escrever ordem que ninguém observou, e `NOT NULL` sem `DEFAULT`
+é rejeitado pelo Postgres contra tabela não vazia. Deixando nula, o fato antigo
+continua no log e o `versao > ?` do projetor o exclui por semântica de SQL, sem
+caso especial. O `CHECK (versao > 0)` existe porque `0` é o sentinela de "nada
+projetado ainda" na projeção — um fato gravado na versão zero seria ao mesmo
+tempo um fato e a ausência de fatos.
+
+Essa migração é o que dispensa o `docker compose down -v` que a primeira versão
+desta decisão exigia — e que contradizia a consequência 7 desta própria ADR,
+segundo a qual o log não pode ser expurgado.
 
 Índice único em vez de `ADD CONSTRAINT` porque o `schema.sql` roda a cada subida e precisa ser
 idempotente; a garantia é a mesma.

@@ -290,8 +290,11 @@ public class TarifacaoRepository {
                 competencia,
                 decisao.getSituacao().name(),
                 decisao.getValor(),
-                // OffsetDateTime em UTC -> TIMESTAMP WITH TIME ZONE. Timestamp.from()
-                // numa coluna sem fuso gravava a hora local da JVM.
+                // Em UTC, explicitamente, e nao Timestamp.from(): numa coluna
+                // sem fuso o driver gravava a hora local da JVM, e a competencia
+                // do stream sai de UTC. Os dois precisam concordar sobre o mes,
+                // ou o replay por versao e a reconciliacao por liquidado_em
+                // passam a ver conjuntos de fatos diferentes.
                 evento.getLiquidadoEm().atOffset(ZoneOffset.UTC),
                 Long.valueOf(versao));
     }
