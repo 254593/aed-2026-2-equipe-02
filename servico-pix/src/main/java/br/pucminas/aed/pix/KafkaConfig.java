@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -56,11 +57,13 @@ public class KafkaConfig {
     }
 
     @Bean
-    public NewTopic topicoPixRealizado(@Value("${pix.topico}") String topico) {
+    public NewTopic topicoPixRealizado(
+            @Value("${pix.topico}") String topico,
+            @Value("${pix.retencao-ms:604800000}") long retencaoMs) {
         return TopicBuilder.name(topico)
                 .partitions(3)
                 .replicas(1)
+                .config(TopicConfig.RETENTION_MS_CONFIG, Long.toString(retencaoMs))
                 .build();
     }
 }
-

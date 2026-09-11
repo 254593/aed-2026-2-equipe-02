@@ -1,5 +1,8 @@
 pix:
   topico: pagamentos.pix.realizado.v1
+  # Sete dias. A memoria de deduplicacao do consumidor dura 30 dias, para que
+  # todo evento ainda retido no topico continue protegido durante um replay.
+  retencao-ms: 604800000
   cloud-events:
     source: /pagamentos/servico-pix
     type: pagamentos.pix.realizado.v1
@@ -20,4 +23,3 @@ logging:
     org.springframework.boot: INFO
   pattern:
     console: "%d{HH:mm:ss} %-5level %-28logger{0} : %msg%n"
-

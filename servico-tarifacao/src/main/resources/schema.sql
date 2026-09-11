@@ -11,11 +11,11 @@ CREATE TABLE IF NOT EXISTS evento_processado (
   processado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- RETENCAO: esta tabela cresce para sempre e precisa de expurgo. A janela tem
+-- RETENCAO: o EventoProcessadoExpurgador remove diariamente os ce_id com mais
+-- de 30 dias (prazo configuravel em tarifacao.deduplicacao.*). A janela tem
 -- de ser MAIOR que a retencao do topico — se for menor, um replay de mensagem
 -- antiga encontra a tabela ja limpa e passa pela deduplicacao como se fosse
 -- evento novo, cobrando a empresa duas vezes.
---   DELETE FROM evento_processado WHERE processado_em < now() - INTERVAL '7 days';
 
 -- ---------------------------------------------------------------------------
 -- O contrato comercial da empresa: a REGRA que decide isencao e tarifa.

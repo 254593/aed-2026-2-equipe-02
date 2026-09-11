@@ -738,10 +738,66 @@ projetor vai ser mexido de qualquer forma.
 
 ---
 
+### Amanda Bouzan (255369) — retenção da memória de deduplicação
+
+Ferramenta: Codex (GPT-5). Interações de 10/09/2026.
+
+---
+
+#### 1. Validar sem subir Kafka, Postgres e Docker
+
+**Pedido.** Encontrar uma contribuição incremental que pudesse ser verificada localmente por testes
+unitários, pois o ambiente completo não estava disponível.
+
+**Sugerido.** Tratar compilação e testes unitários como garantia de que nada seria quebrado na
+integração.
+
+**RECUSADO.** Testes unitários não validam a configuração efetiva de um tópico já existente, a
+execução do agendamento pelo Spring nem a compatibilidade do SQL com um Postgres real. Eles reduzem
+o risco e verificam a regra isolada, mas a validação ponta a ponta continua necessária no ambiente
+da equipe.
+
+**Aceito.** Isolar o cálculo temporal com relógio fixo, testar o SQL com `JdbcTemplate` simulado e
+documentar os comandos que o revisor deverá executar no ambiente completo.
+
+---
+
+#### 2. Usar sete dias para o tópico e também para a deduplicação
+
+**Pedido.** Transformar o comentário de retenção do `schema.sql` em uma política explícita.
+
+**Sugerido.** Manter sete dias nos dois lados porque esse é o prazo já mencionado no arquivo.
+
+**RECUSADO.** Prazos iguais não dão margem para a expiração assíncrona dos segmentos do Kafka nem
+para a diferença entre produção e processamento. Durante essa fronteira, um evento ainda legível
+no tópico poderia encontrar seu `ce_id` já removido e produzir efeito novamente.
+
+**Aceito.** Declarar sete dias no tópico e 30 dias para `evento_processado`, mantendo como invariante
+que a memória de deduplicação seja maior que a retenção da origem. Alterar um prazo exige revisar o
+outro na mesma mudança.
+
+---
+
+#### 3. Apagar a própria `tarifa` após o prazo
+
+**Pedido.** Revisar quais dados deveriam ser removidos pelo expurgo.
+
+**Sugerido.** Excluir também registros antigos de `tarifa`, já que eles carregam o mesmo
+`evento_id`, reduzindo mais o volume do banco.
+
+**RECUSADO.** As tabelas têm semânticas diferentes. `evento_processado` é um índice operacional de
+deduplicação; `tarifa` é o log de negócio e o event store definido no ADR-005, necessário para
+auditoria e reconstrução da projeção. Aplicar a mesma retenção destruiria a fonte da verdade.
+
+**Aceito.** O SQL do expurgo referencia somente `evento_processado`, sempre com predicado temporal.
+O ADR-006 registra explicitamente que `tarifa` e `fatura_competencia` ficam fora dessa rotina.
+
+---
+
 <!--
   Demais integrantes: acrescentem a sua subseção da Aula 05 acima desta linha, no
   mesmo formato (### Nome (matrícula) — parte pela qual respondeu).
   A rubrica pede TRÊS interações com ao menos UMA recusa justificada POR
   INTEGRANTE — a Aula 04 cobre apenas o Evandro e a Aula 05, apenas o Allainn.
-  Faltam: Amanda, Alexsander, Guilherme, Jhonathan e Samuel.
+  Faltam: Alexsander, Guilherme, Jhonathan e Samuel.
 -->

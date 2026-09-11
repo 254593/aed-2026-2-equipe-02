@@ -360,10 +360,11 @@ operação que a reentrega quebra. Os não cobrados (`SEM_CONTRATO`, `TETO_ATING
 são fatos que a auditoria precisa ver; a coluna `situacao` é o que os mantém fora da contagem de
 franquia. De brinde, o extrato mensal do cliente fica completo e reprocessável.
 
-**Retenção:** `evento_processado` cresce para sempre e precisa de expurgo, com janela **maior**
-que a retenção do tópico. Se for menor, um replay de mensagem antiga encontra a tabela limpa e
-passa pela deduplicação como evento novo, cobrando o cliente duas vezes. O `schema.sql` documenta
-o `DELETE`.
+**Retenção:** `EventoProcessadoExpurgador` remove diariamente os `ce_id` com mais de 30 dias. O
+prazo é configurável e maior que os sete dias declarados pelo produtor para o tópico. Se essa
+relação for invertida, um replay pode encontrar a tabela limpa e repetir a cobrança. O expurgo
+remove somente o índice `evento_processado`; o log de negócio em `tarifa` não é apagado. A decisão
+e suas alternativas estão no [ADR-006](../docs/adr/ADR-006-retencao-da-deduplicacao.md).
 
 ### Competência: do evento, não do relógio
 
@@ -424,4 +425,7 @@ justamente o bug que os testes 8 e 9 existem para pegar.
 | `spring.json.use.type.headers` | `false` | a classe a usar é a **nossa**, não a do produtor |
 | `value-deserializer` | `ErrorHandlingDeserializer` (delegando ao `JsonDeserializer`) | carga malformada deixa de estourar dentro do `poll()` — que travava a partição em loop e enchia o log — e vira `DeserializationException` para o tratador de erro |
 | `tarifacao.retentativa.*` | 5 tentativas, backoff 1 s → 16 s | retentativa **em posição** (bloqueante, como a regra exige); esgotada, o registro vai para a **DLQ** `<tópico>.dlq`, na mesma partição, e o offset é confirmado. Desserialização não é retentada |
+| `tarifacao.deduplicacao.retencao-dias` | `30` | prazo da memória de `ce_id`; deve ser maior que a retenção do tópico de origem |
+| `tarifacao.deduplicacao.expurgo-habilitado` | `true` | permite desligar o agendamento em testes ou manutenção |
+| `tarifacao.deduplicacao.expurgo-intervalo-ms` | `86400000` | executa o expurgo uma vez por dia |
 | `metadata.max.age.ms` | `5000` | sem isso são 5 min de tela parada se o consumidor subir antes do tópico |

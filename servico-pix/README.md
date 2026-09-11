@@ -75,6 +75,30 @@ No Windows, `scripts\publicar-pix.ps1` tem os mesmos parâmetros. Os comandos `c
 O retorno de `KafkaTemplate.send()` pertence a `ResultadoPublicacaoListener`, que registra
 sucesso ou falha de publicação. O serviço não possui banco nesta etapa.
 
+### Retenção do tópico
+
+O tópico `pagamentos.pix.realizado.v1` declara retenção de sete dias (`604800000 ms`). O consumidor
+mantém a memória de `ce_id` por 30 dias; a diferença garante que todo evento ainda disponível para
+replay continue coberto pela deduplicação. A relação e os custos estão registrados no
+[ADR-006](../docs/adr/ADR-006-retencao-da-deduplicacao.md).
+
+Em um ambiente já criado, confira a configuração efetiva:
+
+```bash
+docker exec e02-kafka /opt/kafka/bin/kafka-configs.sh \
+  --bootstrap-server kafka:9094 --describe \
+  --entity-type topics --entity-name pagamentos.pix.realizado.v1
+```
+
+Se `retention.ms` não aparecer como `604800000`, aplique antes do teste integrado:
+
+```bash
+docker exec e02-kafka /opt/kafka/bin/kafka-configs.sh \
+  --bootstrap-server kafka:9094 --alter \
+  --entity-type topics --entity-name pagamentos.pix.realizado.v1 \
+  --add-config retention.ms=604800000
+```
+
 ## Testar
 
 ```bash

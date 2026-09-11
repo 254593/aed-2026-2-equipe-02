@@ -1,6 +1,8 @@
 package br.pucminas.aed.tarifacao.service;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -74,6 +76,19 @@ public class TarifacaoRepository {
 
     public void limparEventosProcessados() {
         jdbc.update("DELETE FROM evento_processado");
+    }
+
+    /**
+     * Remove a memoria de deduplicacao vencida sem tocar no log de negocio.
+     * O limite e exclusivo: um evento processado exatamente no instante
+     * informado ainda permanece protegido.
+     *
+     * @return quantidade de identificadores removidos.
+     */
+    public int expurgarEventosProcessadosAntesDe(Instant limiteExclusivo) {
+        return jdbc.update(
+                "DELETE FROM evento_processado WHERE processado_em < ?",
+                Timestamp.from(limiteExclusivo));
     }
 
     // ------------------------------------------------------------------

@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.common.config.TopicConfig;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,10 +33,12 @@ class KafkaConfigTest {
     @Test
     void declaraTopicoComTresParticoes() {
         NewTopic topico = new KafkaConfig().topicoPixRealizado(
-                "pagamentos.pix.realizado.v1");
+                "pagamentos.pix.realizado.v1", 604800000L);
 
         assertThat(topico.name()).isEqualTo("pagamentos.pix.realizado.v1");
         assertThat(topico.numPartitions()).isEqualTo(3);
+        assertThat(topico.configs())
+                .containsEntry(TopicConfig.RETENTION_MS_CONFIG, "604800000");
     }
 }
 

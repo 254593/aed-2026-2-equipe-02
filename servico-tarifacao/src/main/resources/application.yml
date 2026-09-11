@@ -14,6 +14,14 @@ tarifacao:
     intervalo-inicial-ms: 1000
     intervalo-maximo-ms: 16000
 
+  # O ce_id fica guardado por mais tempo que os sete dias do topico de origem.
+  # Assim, todo evento ainda disponivel para replay permanece deduplicavel.
+  deduplicacao:
+    retencao-dias: 30
+    expurgo-habilitado: true
+    expurgo-intervalo-ms: 86400000
+    expurgo-atraso-inicial-ms: 60000
+
 spring:
   application:
     name: servico-tarifacao

@@ -11,7 +11,7 @@ Equipe 02 · líder: **Evandro V. Junior**
 |---|---|---|
 | Evandro V. Junior | 254593 | líder · ADR-002 e decisão do domínio |
 | Allainn Christiam | 254337 | consumidor de tarifação, infraestrutura, teste de idempotência |
-| Amanda Bouzan | 255369 | publicador do evento de Pix realizado |
+| Amanda Bouzan | 255369 | publicador do evento de Pix · política de retenção da deduplicação |
 | Alexsander da Silva | 254779 | testes automatizados adicionais do consumidor |
 | Guilherme Henrique Jeske | 1665116 | |
 | Jhonathan Carvo | 258239| Implementação do agregador de Pix, tratamento de eventos atrasados e deduplicação, Também participei da documentação e revisão da entrega. |
@@ -385,6 +385,7 @@ aed-2026-2-equipe-02/
 ├── docker-compose.yml           Kafka + Postgres + Kafka UI
 ├── docs/
 │   ├── adr/ADR-002-dominio-do-projeto.md
+│   ├── adr/ADR-006-retencao-da-deduplicacao.md
 │   ├── regra-de-tarifacao.md    a regra em detalhe: faixas, teto, compensação
 │   ├── IA.md                    registro do uso de IA, por integrante
 │   └── entregas/aula-02.md      folha de rosto desta entrega
