@@ -14,7 +14,7 @@ Equipe 02 · líder: **Evandro V. Junior**
 | Amanda Bouzan | 255369 | publicador do evento de Pix realizado |
 | Alexsander da Silva | 254779 | testes automatizados adicionais do consumidor |
 | Guilherme Henrique Jeske | 1665116 | |
-| Jhonathan Carvo | 258239| Implementação do agregador de Pix, tratamento de eventos atrasados e deduplicação, Também participei da documentação e revisão da entrega. |
+| Jhonathan Carvo | 258239 | Implementação do agregador de Pix, tratamento de eventos atrasados e deduplicação; implementação do fluxo de resiliência e compensação com `PixEstornado`, DLQ, reprocessamento e atualização da projeção da fatura; documentação da arquitetura, ADR-006, contrato de eventos e testes da entrega final. |
 | Samuel Machado de Lima | 1215716 | |
 
 <!--
