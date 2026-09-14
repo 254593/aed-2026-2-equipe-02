@@ -24,6 +24,7 @@ import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.CommonErrorHandler;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.DelegatingByTypeSerializer;
@@ -133,6 +134,9 @@ public class KafkaConfig {
             new ConcurrentKafkaListenerContainerFactory<String, PixEstornadoEvent>();
         fabrica.setConsumerFactory(consumidor);
         fabrica.setCommonErrorHandler(tratadorDeErro);
+        // O ack-mode do yml so vale para a fabrica padrao do Boot. Sem isto o
+        // container nao entrega o Acknowledgment que o EstornoListener pede.
+        fabrica.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         return fabrica;
         }
 
