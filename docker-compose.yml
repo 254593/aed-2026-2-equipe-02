@@ -64,9 +64,10 @@ services:
     ports:
       - "15432:5432"
     environment:
-      # Este banco pertence ao servico-tarifacao. Nele moram as tres tabelas do
-      # consumidor: evento_processado (idempotencia), oferta (o plano do
-      # cliente) e tarifa (o efeito de negocio).
+      # Este banco pertence ao servico-tarifacao. Nele moram as tabelas do
+      # consumidor: evento_processado (idempotencia), oferta e oferta_faixa (o
+      # plano do cliente), tarifa e estorno (o efeito de negocio) e
+      # fatura_competencia (a projecao).
       #
       # O servico-pix nao tem banco nesta etapa. Se vier a precisar, ganha o
       # PROPRIO servico aqui no compose — servico que compartilha tabela com

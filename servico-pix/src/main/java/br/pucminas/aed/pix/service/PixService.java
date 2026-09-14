@@ -27,6 +27,7 @@ public class PixService {
     private final ResultadoPublicacaoListener resultadoPublicacaoListener;
     private final Clock relogio;
     private final String topico;
+    private final String topicoEstorno;
     private final String origem;
     private final String tipo;
 
@@ -34,21 +35,25 @@ public class PixService {
     public PixService(KafkaTemplate<String, Object> clienteDoBroker,
                       ResultadoPublicacaoListener resultadoPublicacaoListener,
                       @Value("${pix.topico}") String topico,
+                      @Value("${pix.topico-estorno}") String topicoEstorno,
                       @Value("${pix.cloud-events.source}") String origem,
                       @Value("${pix.cloud-events.type}") String tipo) {
-        this(clienteDoBroker, resultadoPublicacaoListener, Clock.systemUTC(), topico, origem, tipo);
+        this(clienteDoBroker, resultadoPublicacaoListener, Clock.systemUTC(),
+                topico, topicoEstorno, origem, tipo);
     }
 
     PixService(KafkaTemplate<String, Object> clienteDoBroker,
                ResultadoPublicacaoListener resultadoPublicacaoListener,
                Clock relogio,
                String topico,
+               String topicoEstorno,
                String origem,
                String tipo) {
         this.clienteDoBroker = clienteDoBroker;
         this.resultadoPublicacaoListener = resultadoPublicacaoListener;
         this.relogio = relogio;
         this.topico = topico;
+        this.topicoEstorno = topicoEstorno;
         this.origem = origem;
         this.tipo = tipo;
     }
@@ -86,7 +91,6 @@ public class PixService {
                 estorno.getEventoOriginalId(), agora, estorno.getIdTransacaoPix(),
                 estorno.getIdEmpresa(), estorno.getValor(), estorno.getMotivo());
 
-        String topicoEstorno = topico.replace(".realizado.", ".estornado.");
         ProducerRecord<String, Object> registro =
                 new ProducerRecord<String, Object>(topicoEstorno, evento.getIdEmpresa(), evento);
         adicionarCabecalhosEstorno(registro, evento);
@@ -112,10 +116,28 @@ public class PixService {
             throw new IllegalArgumentException(
                     "eventoOriginalId, idTransacaoPix, idEmpresa, valor e motivo sao obrigatorios");
         }
+        // Mesma regra do realizar: eventoId ausente o servico gera, mas presente
+        // em branco e erro do cliente — gerar um UUID ali esconderia o defeito.
+        if (estorno.getEventoId() != null && estorno.getEventoId().isBlank()) {
+            throw new IllegalArgumentException("eventoId, quando informado, nao pode ser vazio");
+        }
     }
 
     private boolean vazio(String valor) {
         return valor == null || valor.isBlank();
+    }
+
+    /**
+     * O instante da liquidacao vem do chamador, que e quem sabe quando o SPI
+     * liquidou. O relogio local e apenas o fallback para quem publica no ato:
+     * um Pix liquidado em 31/07 e informado em 01/08 pertence a julho, e so o
+     * chamador pode dizer isso.
+     */
+    private Instant liquidacaoDe(RealizacaoPixVO realizacao) {
+        if (realizacao.getLiquidadoEm() != null) {
+            return realizacao.getLiquidadoEm();
+        }
+        return Instant.now(relogio);
     }
 
     /**
@@ -131,19 +153,6 @@ public class PixService {
      * Gerar quando ausente mantem o caminho simples funcionando: quem nao se
      * importa com retry nao precisa saber que a chave existe.
      */
-    /**
-     * O instante da liquidacao vem do chamador, que e quem sabe quando o SPI
-     * liquidou. O relogio local e apenas o fallback para quem publica no ato:
-     * um Pix liquidado em 31/07 e informado em 01/08 pertence a julho, e so o
-     * chamador pode dizer isso.
-     */
-    private Instant liquidacaoDe(RealizacaoPixVO realizacao) {
-        if (realizacao.getLiquidadoEm() != null) {
-            return realizacao.getLiquidadoEm();
-        }
-        return Instant.now(relogio);
-    }
-
     private String identidadeDe(RealizacaoPixVO realizacao) {
         if (realizacao.getEventoId() != null && !realizacao.getEventoId().isBlank()) {
             return realizacao.getEventoId();

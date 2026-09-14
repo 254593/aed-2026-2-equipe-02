@@ -15,7 +15,7 @@ Equipe 02 · líder: **Evandro V. Junior**
 | Alexsander da Silva | 254779 | testes automatizados adicionais do consumidor |
 | Guilherme Henrique Jeske | 1665116 | |
 | Jhonathan Carvo | 258239 | Implementação do agregador de Pix, tratamento de eventos atrasados e deduplicação; implementação do fluxo de resiliência e compensação com `PixEstornado`, DLQ, reprocessamento e atualização da projeção da fatura; documentação da arquitetura, ADR-006, contrato de eventos e testes da entrega final. |
-| Samuel Machado de Lima | 1215716 | |
+| Samuel Machado de Lima | 1215716 | revisão do fluxo de estorno: validação do `eventoId` em branco, tópico de estorno lido da configuração e aviso de `ce_id` ausente no `EstornoListener`; ajustes de documentação no README e no docker-compose |
 
 <!--
 PENDENTE — para a equipe conferir antes da entrega:
@@ -71,7 +71,7 @@ O processo completo, os quatro critérios e as consequências aceitas estão em
 
 ## Agregador: quanto foi liquidado por hora
 
-O `servico-agregador-pix` (etapa 2) consome o **mesmo tópico** que a tarifação, num **grupo próprio**,
+O `servico-agregador-pix` (etapa 3) consome o **mesmo tópico** que a tarifação, num **grupo próprio**,
 e responde: **"Quanto foi liquidado em Pix por hora?"** — em reais e em quantidade.
 
 ```bash
@@ -153,6 +153,17 @@ docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT id_empresa, c
 
 O Pix original continua em `tarifa`; o estorno aparece em `estorno` e reduz apenas o total
 liquido da fatura. Reenviar o mesmo estorno nao cria uma segunda linha.
+
+Regras do `POST /pix/estornos`:
+
+- `eventoOriginalId`, `idTransacaoPix`, `idEmpresa`, `valor` (maior que zero) e `motivo` sao
+  obrigatorios; faltando algum, a resposta e **400**.
+- `eventoId` segue a mesma regra do Pix realizado: ausente, o servico gera um UUID; informado em
+  branco (`""`), a resposta e **400**, em vez de gerar uma identidade escondendo o erro do cliente.
+- O topico vem de `pix.topico-estorno` no `application.yml` do `servico-pix`, a mesma propriedade
+  que o `KafkaConfig` usa para criar o topico.
+- Se um estorno chegar sem o cabecalho `ce_id`, o `EstornoListener` usa o `eventoId` do corpo e
+  registra um aviso no log, como ja fazia o `TarifacaoListener`.
 
 ## Fluxo do sistema
 
@@ -408,14 +419,17 @@ aed-2026-2-equipe-02/
 ├── README.md
 ├── docker-compose.yml           Kafka + Postgres + Kafka UI
 ├── docs/
-│   ├── adr/ADR-002-dominio-do-projeto.md
+│   ├── adr/                     ADR-002, ADR-003, ADR-005 e ADR-006
+│   ├── arquitetura.md           visão geral dos serviços e do fluxo
+│   ├── contrato.md              contrato dos eventos no tópico
 │   ├── regra-de-tarifacao.md    a regra em detalhe: faixas, teto, compensação
 │   ├── IA.md                    registro do uso de IA, por integrante
-│   └── entregas/aula-02.md      folha de rosto desta entrega
+│   └── entregas/                folhas de rosto das aulas 02 a 05
 ├── scripts/                     publicar-pix.sh e .ps1 — exercitam a API
 ├── servico-pix/                 publicador  (projeto Maven independente)
-└── servico-tarifacao/           consumidor  (projeto Maven independente)
+├── servico-tarifacao/           consumidor  (projeto Maven independente)
+└── servico-agregador-pix/       agregador por hora (projeto Maven independente)
 ```
 
-Os dois serviços não compartilham POM pai nem módulo de contrato: o contrato entre eles é o JSON
+Os três serviços não compartilham POM pai nem módulo de contrato: o contrato entre eles é o JSON
 que trafega no tópico `pagamentos.pix.realizado.v1`.
