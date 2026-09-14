@@ -71,7 +71,7 @@ O processo completo, os quatro critérios e as consequências aceitas estão em
 
 ## Agregador: quanto foi liquidado por hora
 
-O `servico-agregador-pix` (etapa 2) consome o **mesmo tópico** que a tarifação, num **grupo próprio**,
+O `servico-agregador-pix` (etapa 3) consome o **mesmo tópico** que a tarifação, num **grupo próprio**,
 e responde: **"Quanto foi liquidado em Pix por hora?"** — em reais e em quantidade.
 
 ```bash
