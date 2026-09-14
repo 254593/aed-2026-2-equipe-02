@@ -112,6 +112,11 @@ public class PixService {
             throw new IllegalArgumentException(
                     "eventoOriginalId, idTransacaoPix, idEmpresa, valor e motivo sao obrigatorios");
         }
+        // Mesma regra do realizar: eventoId ausente o servico gera, mas presente
+        // em branco e erro do cliente — gerar um UUID ali esconderia o defeito.
+        if (estorno.getEventoId() != null && estorno.getEventoId().isBlank()) {
+            throw new IllegalArgumentException("eventoId, quando informado, nao pode ser vazio");
+        }
     }
 
     private boolean vazio(String valor) {
