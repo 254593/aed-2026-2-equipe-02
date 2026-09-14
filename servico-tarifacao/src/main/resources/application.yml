@@ -4,6 +4,7 @@ tarifacao:
   # pelo servico-pix. Duas grafias para a mesma coisa e um dos erros que o
   # enunciado lista como facil de evitar.
   topico: pagamentos.pix.realizado.v1
+  topico-estorno: pagamentos.pix.estornado.v1
 
   # Retentativa EM POSICAO (bloqueante, ver docs/regra-de-tarifacao.md) com
   # backoff exponencial: 1s, 2s, 4s, 8s, 16s. Esgotada, o registro vai para

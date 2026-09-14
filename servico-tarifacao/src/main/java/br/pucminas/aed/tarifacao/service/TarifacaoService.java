@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import br.pucminas.aed.tarifacao.domain.DecisaoDeTarifacaoVO;
 import br.pucminas.aed.tarifacao.domain.OfertaVO;
 import br.pucminas.aed.tarifacao.domain.PixRealizadoEvent;
+import br.pucminas.aed.tarifacao.domain.PixEstornadoEvent;
 
 /**
  * O ponto de decisao do dominio — a PoliticaDeTarifacao do ADR-002, com o
@@ -117,6 +118,19 @@ public class TarifacaoService {
         log.info("pix processado  evento={}  empresa={}  competencia={}  situacao={}  valor={}",
                 eventoId, evento.getIdEmpresa(), competencia,
                 decisao.getSituacao(), decisao.getValor());
+        return true;
+    }
+
+    @Transactional
+    public boolean processarEstorno(String eventoId, PixEstornadoEvent evento) {
+        boolean novo = repositorio.registrarEstorno(eventoId, evento);
+        if (!novo) {
+            log.info("estorno {} JA PROCESSADO, descartando em silencio", eventoId);
+            return false;
+        }
+        log.info("estorno processado evento={} original={} empresa={} valor={}",
+                eventoId, evento.getEventoOriginalId(),
+                evento.getIdEmpresa(), evento.getValor());
         return true;
     }
 

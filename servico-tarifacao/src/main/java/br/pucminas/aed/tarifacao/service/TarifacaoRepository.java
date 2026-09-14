@@ -14,6 +14,7 @@ import br.pucminas.aed.tarifacao.domain.DecisaoDeTarifacaoVO;
 import br.pucminas.aed.tarifacao.domain.FaixaDeTarifaVO;
 import br.pucminas.aed.tarifacao.domain.OfertaVO;
 import br.pucminas.aed.tarifacao.domain.PixRealizadoEvent;
+import br.pucminas.aed.tarifacao.domain.PixEstornadoEvent;
 import br.pucminas.aed.tarifacao.domain.SituacaoDaTarifaVO;
 
 /**
@@ -298,6 +299,64 @@ public class TarifacaoRepository {
                 evento.getLiquidadoEm().atOffset(ZoneOffset.UTC),
                 Long.valueOf(versao));
     }
+
+            /** Registra o fato de compensacao sem alterar o fato original. */
+            public boolean registrarEstorno(String eventoId, PixEstornadoEvent evento) {
+            List<EstornoBase> originais = jdbc.query(
+                "SELECT evento_id, id_empresa, id_transacao_pix, competencia, situacao, valor "
+                    + "FROM tarifa WHERE evento_id = ? AND id_empresa = ? AND id_transacao_pix = ?",
+                (rs, linha) -> new EstornoBase(rs.getString("evento_id"),
+                    rs.getString("id_empresa"), rs.getString("id_transacao_pix"),
+                    rs.getString("competencia"), rs.getString("situacao"),
+                    rs.getBigDecimal("valor")),
+                evento.getEventoOriginalId(), evento.getIdEmpresa(), evento.getIdTransacaoPix());
+            if (originais.isEmpty()) {
+                throw new IllegalStateException("evento original ainda nao foi tarifado: "
+                    + evento.getEventoOriginalId());
+            }
+            EstornoBase original = originais.get(0);
+            int linhas = jdbc.update(
+                "INSERT INTO estorno (evento_id, evento_original_id, id_empresa, id_transacao_pix, "
+                    + "competencia, situacao_original, valor, motivo, estornado_em) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ? ) ON CONFLICT DO NOTHING",
+                eventoId, original.eventoId, original.idEmpresa,
+                original.idTransacaoPix, original.competencia, original.situacao,
+                original.valor, evento.getMotivo(), evento.getEstornadoEm().atOffset(ZoneOffset.UTC));
+            return linhas == 1;
+            }
+
+            public BigDecimal totalEstornadoNaCompetencia(String idEmpresa, String competencia) {
+            BigDecimal total = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(valor), 0) FROM estorno WHERE id_empresa = ? AND competencia = ?",
+                BigDecimal.class, idEmpresa, competencia);
+            return total == null ? BigDecimal.ZERO : total;
+            }
+
+            public long contarEstornosNaCompetencia(String idEmpresa, String competencia) {
+            Long total = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM estorno WHERE id_empresa = ? AND competencia = ?",
+                Long.class, idEmpresa, competencia);
+            return total == null ? 0L : total.longValue();
+            }
+
+            private static final class EstornoBase {
+            private final String eventoId;
+            private final String idEmpresa;
+            private final String idTransacaoPix;
+            private final String competencia;
+            private final String situacao;
+            private final BigDecimal valor;
+
+            private EstornoBase(String eventoId, String idEmpresa, String idTransacaoPix,
+                String competencia, String situacao, BigDecimal valor) {
+                this.eventoId = eventoId;
+                this.idEmpresa = idEmpresa;
+                this.idTransacaoPix = idTransacaoPix;
+                this.competencia = competencia;
+                this.situacao = situacao;
+                this.valor = valor;
+            }
+            }
 
     /**
      * A proxima versao do stream (id_empresa, competencia) — ADR-005.

@@ -26,6 +26,8 @@ public final class FaturaDaCompetenciaVO {
     private final String idEmpresa;
     private final String competencia;
     private final BigDecimal totalTarifado;
+    private final BigDecimal totalEstornado;
+    private final long quantidadeDeFranquiaEstornada;
     private final long quantidadeDePix;
     private final Map<SituacaoDaTarifaVO, Long> porSituacao;
     private final long versaoProjetada;
@@ -36,10 +38,24 @@ public final class FaturaDaCompetenciaVO {
                                  long quantidadeDePix,
                                  Map<SituacaoDaTarifaVO, Long> porSituacao,
                                  long versaoProjetada) {
+                    this(idEmpresa, competencia, totalTarifado, BigDecimal.ZERO,
+                        quantidadeDePix, porSituacao, 0L, versaoProjetada);
+                    }
+
+                    public FaturaDaCompetenciaVO(String idEmpresa,
+                                 String competencia,
+                                 BigDecimal totalTarifado,
+                                 BigDecimal totalEstornado,
+                                 long quantidadeDePix,
+                                 Map<SituacaoDaTarifaVO, Long> porSituacao,
+                                 long quantidadeDeFranquiaEstornada,
+                                 long versaoProjetada) {
 
         this.idEmpresa = Objects.requireNonNull(idEmpresa, "idEmpresa e obrigatorio");
         this.competencia = Objects.requireNonNull(competencia, "competencia e obrigatoria");
         this.totalTarifado = Objects.requireNonNull(totalTarifado, "totalTarifado e obrigatorio");
+        this.totalEstornado = Objects.requireNonNull(totalEstornado, "totalEstornado e obrigatorio");
+        this.quantidadeDeFranquiaEstornada = quantidadeDeFranquiaEstornada;
         this.quantidadeDePix = quantidadeDePix;
         this.versaoProjetada = versaoProjetada;
 
@@ -60,6 +76,18 @@ public final class FaturaDaCompetenciaVO {
 
     public BigDecimal getTotalTarifado() {
         return totalTarifado;
+    }
+
+    public BigDecimal getTotalEstornado() {
+        return totalEstornado;
+    }
+
+    public BigDecimal getTotalLiquido() {
+        return totalTarifado.subtract(totalEstornado);
+    }
+
+    public long getQuantidadeDeFranquiaEstornada() {
+        return quantidadeDeFranquiaEstornada;
     }
 
     public long getQuantidadeDePix() {

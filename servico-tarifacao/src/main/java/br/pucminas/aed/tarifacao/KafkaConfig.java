@@ -4,10 +4,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +17,9 @@ import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
@@ -23,6 +28,8 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.DelegatingByTypeSerializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,6 +37,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import br.pucminas.aed.tarifacao.domain.PixRealizadoEvent;
+import br.pucminas.aed.tarifacao.domain.PixEstornadoEvent;
 
 /**
  * O que acontece quando uma mensagem NAO pode ser processada.
@@ -100,6 +108,34 @@ public class KafkaConfig {
                 .build();
     }
 
+        @Bean
+        public NewTopic topicoEstorno(@Value("${tarifacao.topico-estorno}") String topicoEstorno) {
+        return TopicBuilder.name(topicoEstorno).partitions(3).replicas(1).build();
+        }
+
+        @Bean(name = "estornoKafkaListenerContainerFactory")
+        public ConcurrentKafkaListenerContainerFactory<String, PixEstornadoEvent>
+            estornoKafkaListenerContainerFactory(KafkaProperties propriedades,
+                              CommonErrorHandler tratadorDeErro) {
+        Map<String, Object> config = new HashMap<String, Object>(
+            propriedades.buildConsumerProperties(null));
+        config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+        JsonDeserializer<PixEstornadoEvent> json = new JsonDeserializer<PixEstornadoEvent>(
+            PixEstornadoEvent.class);
+        json.addTrustedPackages("br.pucminas.aed.tarifacao.domain");
+        json.setUseTypeHeaders(false);
+        ErrorHandlingDeserializer<PixEstornadoEvent> valor =
+            new ErrorHandlingDeserializer<PixEstornadoEvent>(json);
+        ConsumerFactory<String, PixEstornadoEvent> consumidor =
+            new DefaultKafkaConsumerFactory<String, PixEstornadoEvent>(
+                config, new StringDeserializer(), valor);
+        ConcurrentKafkaListenerContainerFactory<String, PixEstornadoEvent> fabrica =
+            new ConcurrentKafkaListenerContainerFactory<String, PixEstornadoEvent>();
+        fabrica.setConsumerFactory(consumidor);
+        fabrica.setCommonErrorHandler(tratadorDeErro);
+        return fabrica;
+        }
+
     @Bean
     public ProducerFactory<Object, Object> producerFactoryDlq(KafkaProperties propriedades) {
         Map<String, Object> config = new HashMap<String, Object>(
@@ -114,6 +150,10 @@ public class KafkaConfig {
         Map<Class<?>, Serializer<?>> valores = new HashMap<Class<?>, Serializer<?>>();
         valores.put(byte[].class, new ByteArraySerializer());
         valores.put(PixRealizadoEvent.class, json);
+        JsonSerializer<PixEstornadoEvent> jsonEstorno =
+            new JsonSerializer<PixEstornadoEvent>(objectMapperDaDlq());
+        jsonEstorno.setAddTypeInfo(false);
+        valores.put(PixEstornadoEvent.class, jsonEstorno);
 
         return new DefaultKafkaProducerFactory<Object, Object>(config,
                 new DelegatingByTypeSerializer(chaves, true),

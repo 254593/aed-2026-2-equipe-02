@@ -73,6 +73,31 @@ Para o agregador a ordem é indiferente — soma é comutativa —, mas ele herd
 Todos os valores acima são fictícios. O `idEmpresa` segue o padrão `emp-NNNN` da carga de exemplo
 do `servico-tarifacao`, e o `eventoId` é um UUID v4 válido — o exemplo é copiável e funciona.
 
+---
+
+# Contrato do Evento: pagamentos.pix.estornado.v1
+
+O estorno e um fato novo publicado quando um efeito de Pix ja aplicado precisa ser compensado.
+Ele nunca atualiza nem apaga o evento original.
+
+**Tipo e tópico:** `pagamentos.pix.estornado.v1`
+**Produtor:** `servico-pix`
+**Consumidor:** `servico-tarifacao`, grupo `tarifacao-estorno`
+**Chave de partição:** `idEmpresa`
+
+| Campo | Tipo | Obrigatório | Significado |
+|---|---|---|---|
+| `eventoId` | String | Sim | Identidade do fato de estorno e valor de `ce_id` |
+| `eventoOriginalId` | String | Sim | `ce_id` do Pix que originou o efeito |
+| `estornadoEm` | Instant | Sim | Momento em que a compensacao foi detectada |
+| `idTransacaoPix` | String | Sim | Transacao a que o estorno se refere |
+| `idEmpresa` | String | Sim | Empresa e chave de particao |
+| `valor` | BigDecimal | Sim | Valor informado para auditoria; o consumidor confirma o valor da tarifa original |
+| `motivo` | String | Sim | Razao operacional ou de negocio da compensacao |
+
+O consumidor exige que o evento original ja exista, grava uma linha em `estorno` e rejeita um
+segundo estorno do mesmo `eventoOriginalId`. A tabela `tarifa` continua append-only.
+
 ## Quem consome este evento
 
 | Consumidor | Grupo | Campos que declara | Para quê |

@@ -1,5 +1,6 @@
 pix:
   topico: pagamentos.pix.realizado.v1
+  topico-estorno: pagamentos.pix.estornado.v1
   cloud-events:
     source: /pagamentos/servico-pix
     type: pagamentos.pix.realizado.v1

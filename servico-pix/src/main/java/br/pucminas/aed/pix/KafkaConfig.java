@@ -62,5 +62,13 @@ public class KafkaConfig {
                 .replicas(1)
                 .build();
     }
+
+    @Bean
+    public NewTopic topicoPixEstornado(@Value("${pix.topico-estorno}") String topico) {
+        return TopicBuilder.name(topico)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }
 

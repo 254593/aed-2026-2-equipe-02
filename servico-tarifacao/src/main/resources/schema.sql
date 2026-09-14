@@ -11,6 +11,24 @@ CREATE TABLE IF NOT EXISTS evento_processado (
   processado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Fato de compensacao. Nunca altera nem apaga a linha original de tarifa.
+CREATE TABLE IF NOT EXISTS estorno (
+     evento_id          VARCHAR(64) PRIMARY KEY,
+     evento_original_id VARCHAR(64) NOT NULL,
+     id_empresa         VARCHAR(32) NOT NULL,
+     id_transacao_pix   VARCHAR(64) NOT NULL,
+     competencia        VARCHAR(7) NOT NULL,
+     situacao_original  VARCHAR(20) NOT NULL,
+     valor              NUMERIC(10,2) NOT NULL CHECK (valor >= 0),
+     motivo             VARCHAR(500) NOT NULL,
+     estornado_em       TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_estorno_stream
+          ON estorno (id_empresa, competencia);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_estorno_evento_original
+     ON estorno (evento_original_id);
+
 -- RETENCAO: esta tabela cresce para sempre e precisa de expurgo. A janela tem
 -- de ser MAIOR que a retencao do topico — se for menor, um replay de mensagem
 -- antiga encontra a tabela ja limpa e passa pela deduplicacao como se fosse

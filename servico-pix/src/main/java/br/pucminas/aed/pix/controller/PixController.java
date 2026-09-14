@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import br.pucminas.aed.pix.domain.PixRealizadoEvent;
+import br.pucminas.aed.pix.domain.PixEstornadoEvent;
+import br.pucminas.aed.pix.domain.EstornoPixVO;
 import br.pucminas.aed.pix.domain.RealizacaoPixVO;
 import br.pucminas.aed.pix.service.PixService;
 
@@ -29,6 +31,11 @@ public class PixController {
     public ResponseEntity<PixRealizadoEvent> realizar(@RequestBody RealizacaoPixVO realizacao) {
         PixRealizadoEvent evento = pixService.realizar(realizacao);
         return ResponseEntity.accepted().body(evento);
+    }
+
+    @PostMapping("/estornos")
+    public ResponseEntity<PixEstornadoEvent> estornar(@RequestBody EstornoPixVO estorno) {
+        return ResponseEntity.accepted().body(pixService.estornar(estorno));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

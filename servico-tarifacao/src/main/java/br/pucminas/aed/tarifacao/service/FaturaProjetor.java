@@ -92,7 +92,10 @@ public class FaturaProjetor {
                         + "        AND f.competencia = s.competencia "
                         + " WHERE f.id_empresa IS NULL "
                         + "    OR s.ultima <> f.versao_projetada "
-                        + "    OR s.fatos  <> f.qtd_pix",
+                        + "    OR s.fatos  <> f.qtd_pix "
+                        + "    OR COALESCE((SELECT SUM(e.valor) FROM estorno e "
+                        + "        WHERE e.id_empresa = s.id_empresa AND e.competencia = s.competencia), 0) "
+                        + "       <> COALESCE(f.total_estornado, 0)",
                 (rs, linha) -> new StreamPendente(
                         rs.getString("id_empresa"),
                         rs.getString("competencia")));
@@ -146,8 +149,10 @@ public class FaturaProjetor {
                             rs.getString("id_empresa"),
                             rs.getString("competencia"),
                             rs.getBigDecimal("total_tarifado"),
+                            rs.getBigDecimal("total_estornado"),
                             rs.getLong("qtd_pix"),
                             porSituacao,
+                            rs.getLong("qtd_franquia_estornada"),
                             rs.getLong("versao_projetada"));
                 },
                 idEmpresa, competencia);
@@ -204,7 +209,12 @@ public class FaturaProjetor {
     private Fold lerFold(StreamPendente stream) {
         StringBuilder sql = new StringBuilder(
                 "SELECT COUNT(*) AS qtd, COALESCE(SUM(valor), 0) AS total, "
-                        + "COALESCE(MAX(versao), 0) AS ate");
+                + "COALESCE(MAX(versao), 0) AS ate, "
+                + "COALESCE((SELECT SUM(e.valor) FROM estorno e "
+                + "WHERE e.id_empresa = ? AND e.competencia = ?), 0) AS estornado, "
+                + "COALESCE((SELECT COUNT(*) FROM estorno e "
+                + "WHERE e.id_empresa = ? AND e.competencia = ? "
+                + "AND e.situacao_original = 'FRANQUIA'), 0) AS franquia_estornada");
         for (SituacaoDaTarifaVO situacao : SituacaoDaTarifaVO.values()) {
             sql.append(", SUM(CASE WHEN situacao = '").append(situacao.name())
                .append("' THEN 1 ELSE 0 END) AS ").append(colunaDe(situacao));
@@ -221,19 +231,25 @@ public class FaturaProjetor {
                 porSituacao.put(situacao, Long.valueOf(rs.getLong(colunaDe(situacao))));
             }
             return new Fold(rs.getLong("qtd"), rs.getBigDecimal("total"),
-                    rs.getLong("ate"), porSituacao);
-        }, stream.idEmpresa, stream.competencia);
+                    rs.getLong("ate"), porSituacao,
+                    rs.getBigDecimal("estornado"), rs.getLong("franquia_estornada"));
+        }, stream.idEmpresa, stream.competencia,
+            stream.idEmpresa, stream.competencia,
+            stream.idEmpresa, stream.competencia);
     }
 
     /** Garante a existencia da linha sem sobrescrever o que ja estiver la. */
     private String insercaoSeNova() {
         StringBuilder colunas = new StringBuilder(
-                "INSERT INTO fatura_competencia (id_empresa, competencia, total_tarifado, qtd_pix");
-        StringBuilder valores = new StringBuilder(") VALUES (?, ?, ?, ?");
+            "INSERT INTO fatura_competencia (id_empresa, competencia, total_tarifado, total_estornado, "
+                + "qtd_pix");
+        StringBuilder valores = new StringBuilder(") VALUES (?, ?, ?, ?, ?");
         for (SituacaoDaTarifaVO situacao : SituacaoDaTarifaVO.values()) {
             colunas.append(", ").append(colunaDe(situacao));
             valores.append(", ?");
         }
+        colunas.append(", qtd_franquia_estornada");
+        valores.append(", ?");
         colunas.append(", versao_projetada");
         valores.append(", ?) ON CONFLICT DO NOTHING");
         return colunas.toString() + valores.toString();
@@ -244,10 +260,12 @@ public class FaturaProjetor {
         p.add(stream.idEmpresa);
         p.add(stream.competencia);
         p.add(fold.total);
+        p.add(fold.totalEstornado);
         p.add(Long.valueOf(fold.quantidade));
         for (SituacaoDaTarifaVO situacao : SituacaoDaTarifaVO.values()) {
             p.add(fold.porSituacao.get(situacao));
         }
+        p.add(Long.valueOf(fold.quantidadeDeFranquiaEstornada));
         p.add(Long.valueOf(fold.ateVersao));
         return p.toArray();
     }
@@ -255,10 +273,11 @@ public class FaturaProjetor {
     /** ATRIBUI o fold. Repare que nao existe `coluna = coluna + ?` aqui. */
     private String atribuicao() {
         StringBuilder sql = new StringBuilder("UPDATE fatura_competencia SET "
-                + " total_tarifado = ?, qtd_pix = ?");
+            + " total_tarifado = ?, total_estornado = ?, qtd_pix = ?");
         for (SituacaoDaTarifaVO situacao : SituacaoDaTarifaVO.values()) {
             sql.append(", ").append(colunaDe(situacao)).append(" = ?");
         }
+        sql.append(", qtd_franquia_estornada = ?");
         sql.append(", versao_projetada = ? "
                 + " WHERE id_empresa = ? AND competencia = ?");
         return sql.toString();
@@ -267,10 +286,12 @@ public class FaturaProjetor {
     private Object[] parametrosDaAtribuicao(Fold fold, StreamPendente stream) {
         List<Object> p = new ArrayList<Object>();
         p.add(fold.total);
+        p.add(fold.totalEstornado);
         p.add(Long.valueOf(fold.quantidade));
         for (SituacaoDaTarifaVO situacao : SituacaoDaTarifaVO.values()) {
             p.add(fold.porSituacao.get(situacao));
         }
+        p.add(Long.valueOf(fold.quantidadeDeFranquiaEstornada));
         p.add(Long.valueOf(fold.ateVersao));
         p.add(stream.idEmpresa);
         p.add(stream.competencia);
@@ -307,13 +328,18 @@ public class FaturaProjetor {
     private static final class Fold {
         private final long quantidade;
         private final BigDecimal total;
+        private final BigDecimal totalEstornado;
+        private final long quantidadeDeFranquiaEstornada;
         private final long ateVersao;
         private final Map<SituacaoDaTarifaVO, Long> porSituacao;
 
-        Fold(long quantidade, BigDecimal total, long ateVersao,
-             Map<SituacaoDaTarifaVO, Long> porSituacao) {
+           Fold(long quantidade, BigDecimal total, long ateVersao,
+               Map<SituacaoDaTarifaVO, Long> porSituacao,
+               BigDecimal totalEstornado, long quantidadeDeFranquiaEstornada) {
             this.quantidade = quantidade;
             this.total = total;
+              this.totalEstornado = totalEstornado;
+              this.quantidadeDeFranquiaEstornada = quantidadeDeFranquiaEstornada;
             this.ateVersao = ateVersao;
             this.porSituacao = porSituacao;
         }

@@ -15,6 +15,8 @@ import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
 
 import br.pucminas.aed.pix.domain.PixRealizadoEvent;
+import br.pucminas.aed.pix.domain.PixEstornadoEvent;
+import br.pucminas.aed.pix.domain.EstornoPixVO;
 import br.pucminas.aed.pix.domain.RealizacaoPixVO;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -73,6 +75,47 @@ public class PixService {
         CompletableFuture<SendResult<String, Object>> resultado = clienteDoBroker.send(registro);
         resultadoPublicacaoListener.acompanhar(evento.getEventoId(), resultado);
         return evento;
+    }
+
+    public PixEstornadoEvent estornar(EstornoPixVO estorno) {
+        validarEstorno(estorno);
+        Instant agora = Instant.now(relogio);
+        PixEstornadoEvent evento = new PixEstornadoEvent(
+                estorno.getEventoId() == null || estorno.getEventoId().isBlank()
+                        ? UUID.randomUUID().toString() : estorno.getEventoId(),
+                estorno.getEventoOriginalId(), agora, estorno.getIdTransacaoPix(),
+                estorno.getIdEmpresa(), estorno.getValor(), estorno.getMotivo());
+
+        String topicoEstorno = topico.replace(".realizado.", ".estornado.");
+        ProducerRecord<String, Object> registro =
+                new ProducerRecord<String, Object>(topicoEstorno, evento.getIdEmpresa(), evento);
+        adicionarCabecalhosEstorno(registro, evento);
+        CompletableFuture<SendResult<String, Object>> resultado = clienteDoBroker.send(registro);
+        resultadoPublicacaoListener.acompanhar(evento.getEventoId(), resultado);
+        return evento;
+    }
+
+    private void adicionarCabecalhosEstorno(ProducerRecord<String, Object> registro,
+                                             PixEstornadoEvent evento) {
+        registro.headers().add("ce_specversion", "1.0".getBytes(UTF_8));
+        registro.headers().add("ce_id", evento.getEventoId().getBytes(UTF_8));
+        registro.headers().add("ce_source", (origem + "/estornos").getBytes(UTF_8));
+        registro.headers().add("ce_type", "pagamentos.pix.estornado.v1".getBytes(UTF_8));
+        registro.headers().add("ce_time", evento.getEstornadoEm().toString().getBytes(UTF_8));
+    }
+
+    private void validarEstorno(EstornoPixVO estorno) {
+        if (estorno == null || vazio(estorno.getEventoOriginalId())
+                || vazio(estorno.getIdTransacaoPix()) || vazio(estorno.getIdEmpresa())
+                || vazio(estorno.getMotivo()) || estorno.getValor() == null
+                || estorno.getValor().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException(
+                    "eventoOriginalId, idTransacaoPix, idEmpresa, valor e motivo sao obrigatorios");
+        }
+    }
+
+    private boolean vazio(String valor) {
+        return valor == null || valor.isBlank();
     }
 
     /**

@@ -130,6 +130,30 @@ testes da entrega, use `mvn -f servico-tarifacao/pom.xml test`.
 - Se o Docker não subir, confirme que o daemon está rodando com `docker ps`.
 - Se o `curl` no PowerShell falhar, use `curl.exe` e não o alias do PowerShell.
 
+## Falha, DLQ e compensacao
+
+O consumidor usa cinco tentativas com backoff de 1s, 2s, 4s, 8s e 16s. Depois disso, o evento
+vai para `pagamentos.pix.realizado.v1.dlq` com os cabecalhos `ce_*` e `kafka_dlt-*` preservados.
+Carga JSON invalida vai direto para a DLQ. A operacao deve corrigir a causa e republicar o evento
+original pelo Kafka UI, mantendo `ce_id`; a tabela `evento_processado` impede efeito duplicado.
+
+Para demonstrar a compensacao, publique primeiro um Pix com `eventoId` fixo e depois o estorno:
+
+```powershell
+curl.exe -X POST http://localhost:8080/pix/realizados -H "Content-Type: application/json" -d '{"eventoId":"demo-original-001","idTransacaoPix":"pix-demo-001","idEmpresa":"emp-0003","valor":700.00}'
+curl.exe -X POST http://localhost:8080/pix/estornos -H "Content-Type: application/json" -d '{"eventoId":"demo-estorno-001","eventoOriginalId":"demo-original-001","idTransacaoPix":"pix-demo-001","idEmpresa":"emp-0003","valor":0.99,"motivo":"contrato recusado na conciliacao"}'
+```
+
+Depois de alguns segundos, consulte o fato e o ajuste:
+
+```powershell
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT evento_id, evento_original_id, valor, motivo FROM estorno;"
+docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT id_empresa, competencia, total_tarifado, total_estornado, total_tarifado - total_estornado AS total_liquido FROM fatura_competencia;"
+```
+
+O Pix original continua em `tarifa`; o estorno aparece em `estorno` e reduz apenas o total
+liquido da fatura. Reenviar o mesmo estorno nao cria uma segunda linha.
+
 ## Fluxo do sistema
 
 ```text

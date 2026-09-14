@@ -9,6 +9,29 @@ recusa é indício de que a ferramenta decidiu no lugar da equipe.
 
 ---
 
+## Etapa final - resiliencia e compensacao
+
+### Registro desta implementacao
+
+**Pedido.** Implementar o caminho de falha, a DLQ, o reprocessamento e uma Saga de compensacao
+para o fluxo de tarifacao de Pix.
+
+**Sugerido.** Alterar a linha original de `tarifa` com `UPDATE`, ou apagar a tarifa e recalcular
+a fatura como se o Pix nunca tivesse existido.
+
+**RECUSADO.** Compensacao e um fato novo. Apagar ou atualizar o passado destruiria o historico,
+permitiria que o teto mensal reabrisse silenciosamente e violaria a decisao do ADR-005.
+
+**Aceito.** Foi criado o evento `PixEstornado`, o topico `pagamentos.pix.estornado.v1` e a tabela
+append-only `estorno`. O consumidor usa o `ce_id` para idempotencia e a projecao calcula o liquido
+sem modificar `tarifa`.
+
+**Sugerido.** Retentar indefinidamente ate o banco voltar.
+
+**RECUSADO.** Retry infinito bloqueia a particao e impede eventos posteriores de avancarem. A
+politica aceita cinco tentativas com backoff e DLQ, preservando os cabecalhos CloudEvents para
+reprocessamento manual.
+
 ## Aula 02
 
 ### Allainn Christiam (254337) — consumidor de tarifação, infraestrutura e teste
