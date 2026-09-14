@@ -119,19 +119,6 @@ public class PixService {
     }
 
     /**
-     * A identidade do fato: a chave enviada pelo cliente quando houver, um UUID
-     * novo quando nao houver.
-     *
-     * Aceitar a chave do cliente e o que torna o POST seguro de repetir. Sem
-     * ela, um retry por timeout publicaria DOIS eventos com identidades
-     * diferentes para o mesmo Pix; como a deduplicacao do consumidor e pelo
-     * eventoId, os dois passariam e a empresa seria cobrada duas vezes. Com
-     * ela, o segundo POST produz o mesmo ce_id e o consumidor descarta.
-     *
-     * Gerar quando ausente mantem o caminho simples funcionando: quem nao se
-     * importa com retry nao precisa saber que a chave existe.
-     */
-    /**
      * O instante da liquidacao vem do chamador, que e quem sabe quando o SPI
      * liquidou. O relogio local e apenas o fallback para quem publica no ato:
      * um Pix liquidado em 31/07 e informado em 01/08 pertence a julho, e so o
@@ -144,6 +131,19 @@ public class PixService {
         return Instant.now(relogio);
     }
 
+    /**
+     * A identidade do fato: a chave enviada pelo cliente quando houver, um UUID
+     * novo quando nao houver.
+     *
+     * Aceitar a chave do cliente e o que torna o POST seguro de repetir. Sem
+     * ela, um retry por timeout publicaria DOIS eventos com identidades
+     * diferentes para o mesmo Pix; como a deduplicacao do consumidor e pelo
+     * eventoId, os dois passariam e a empresa seria cobrada duas vezes. Com
+     * ela, o segundo POST produz o mesmo ce_id e o consumidor descarta.
+     *
+     * Gerar quando ausente mantem o caminho simples funcionando: quem nao se
+     * importa com retry nao precisa saber que a chave existe.
+     */
     private String identidadeDe(RealizacaoPixVO realizacao) {
         if (realizacao.getEventoId() != null && !realizacao.getEventoId().isBlank()) {
             return realizacao.getEventoId();
