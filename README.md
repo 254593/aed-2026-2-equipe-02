@@ -408,14 +408,17 @@ aed-2026-2-equipe-02/
 ├── README.md
 ├── docker-compose.yml           Kafka + Postgres + Kafka UI
 ├── docs/
-│   ├── adr/ADR-002-dominio-do-projeto.md
+│   ├── adr/                     ADR-002, ADR-003, ADR-005 e ADR-006
+│   ├── arquitetura.md           visão geral dos serviços e do fluxo
+│   ├── contrato.md              contrato dos eventos no tópico
 │   ├── regra-de-tarifacao.md    a regra em detalhe: faixas, teto, compensação
 │   ├── IA.md                    registro do uso de IA, por integrante
-│   └── entregas/aula-02.md      folha de rosto desta entrega
+│   └── entregas/                folhas de rosto das aulas 02 a 05
 ├── scripts/                     publicar-pix.sh e .ps1 — exercitam a API
 ├── servico-pix/                 publicador  (projeto Maven independente)
-└── servico-tarifacao/           consumidor  (projeto Maven independente)
+├── servico-tarifacao/           consumidor  (projeto Maven independente)
+└── servico-agregador-pix/       agregador por hora (projeto Maven independente)
 ```
 
-Os dois serviços não compartilham POM pai nem módulo de contrato: o contrato entre eles é o JSON
+Os três serviços não compartilham POM pai nem módulo de contrato: o contrato entre eles é o JSON
 que trafega no tópico `pagamentos.pix.realizado.v1`.
