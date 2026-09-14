@@ -120,10 +120,10 @@ public class KafkaConfig {
         Map<String, Object> config = new HashMap<String, Object>(
             propriedades.buildConsumerProperties(null));
         config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
-        JsonDeserializer<PixEstornadoEvent> json = new JsonDeserializer<PixEstornadoEvent>(
-            PixEstornadoEvent.class);
-        json.addTrustedPackages("br.pucminas.aed.tarifacao.domain");
-        json.setUseTypeHeaders(false);
+        config.put("spring.json.value.default.type", PixEstornadoEvent.class.getName());
+        config.put("spring.json.trusted.packages", "br.pucminas.aed.tarifacao.domain");
+        config.put("spring.json.use.type.headers", false);
+        JsonDeserializer<PixEstornadoEvent> json = new JsonDeserializer<PixEstornadoEvent>();
         ErrorHandlingDeserializer<PixEstornadoEvent> valor =
             new ErrorHandlingDeserializer<PixEstornadoEvent>(json);
         ConsumerFactory<String, PixEstornadoEvent> consumidor =
