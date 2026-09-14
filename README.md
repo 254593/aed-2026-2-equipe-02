@@ -154,6 +154,17 @@ docker exec e02-postgres psql -U tarifacao -d tarifacao -c "SELECT id_empresa, c
 O Pix original continua em `tarifa`; o estorno aparece em `estorno` e reduz apenas o total
 liquido da fatura. Reenviar o mesmo estorno nao cria uma segunda linha.
 
+Regras do `POST /pix/estornos`:
+
+- `eventoOriginalId`, `idTransacaoPix`, `idEmpresa`, `valor` (maior que zero) e `motivo` sao
+  obrigatorios; faltando algum, a resposta e **400**.
+- `eventoId` segue a mesma regra do Pix realizado: ausente, o servico gera um UUID; informado em
+  branco (`""`), a resposta e **400**, em vez de gerar uma identidade escondendo o erro do cliente.
+- O topico vem de `pix.topico-estorno` no `application.yml` do `servico-pix`, a mesma propriedade
+  que o `KafkaConfig` usa para criar o topico.
+- Se um estorno chegar sem o cabecalho `ce_id`, o `EstornoListener` usa o `eventoId` do corpo e
+  registra um aviso no log, como ja fazia o `TarifacaoListener`.
+
 ## Fluxo do sistema
 
 ```text
