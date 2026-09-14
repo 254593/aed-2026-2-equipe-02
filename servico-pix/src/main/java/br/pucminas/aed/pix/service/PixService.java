@@ -27,6 +27,7 @@ public class PixService {
     private final ResultadoPublicacaoListener resultadoPublicacaoListener;
     private final Clock relogio;
     private final String topico;
+    private final String topicoEstorno;
     private final String origem;
     private final String tipo;
 
@@ -34,21 +35,25 @@ public class PixService {
     public PixService(KafkaTemplate<String, Object> clienteDoBroker,
                       ResultadoPublicacaoListener resultadoPublicacaoListener,
                       @Value("${pix.topico}") String topico,
+                      @Value("${pix.topico-estorno}") String topicoEstorno,
                       @Value("${pix.cloud-events.source}") String origem,
                       @Value("${pix.cloud-events.type}") String tipo) {
-        this(clienteDoBroker, resultadoPublicacaoListener, Clock.systemUTC(), topico, origem, tipo);
+        this(clienteDoBroker, resultadoPublicacaoListener, Clock.systemUTC(),
+                topico, topicoEstorno, origem, tipo);
     }
 
     PixService(KafkaTemplate<String, Object> clienteDoBroker,
                ResultadoPublicacaoListener resultadoPublicacaoListener,
                Clock relogio,
                String topico,
+               String topicoEstorno,
                String origem,
                String tipo) {
         this.clienteDoBroker = clienteDoBroker;
         this.resultadoPublicacaoListener = resultadoPublicacaoListener;
         this.relogio = relogio;
         this.topico = topico;
+        this.topicoEstorno = topicoEstorno;
         this.origem = origem;
         this.tipo = tipo;
     }
@@ -86,7 +91,6 @@ public class PixService {
                 estorno.getEventoOriginalId(), agora, estorno.getIdTransacaoPix(),
                 estorno.getIdEmpresa(), estorno.getValor(), estorno.getMotivo());
 
-        String topicoEstorno = topico.replace(".realizado.", ".estornado.");
         ProducerRecord<String, Object> registro =
                 new ProducerRecord<String, Object>(topicoEstorno, evento.getIdEmpresa(), evento);
         adicionarCabecalhosEstorno(registro, evento);

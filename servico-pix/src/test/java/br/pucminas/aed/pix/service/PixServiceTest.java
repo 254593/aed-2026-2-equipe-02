@@ -31,6 +31,7 @@ import br.pucminas.aed.pix.domain.RealizacaoPixVO;
 class PixServiceTest {
 
     private static final String TOPICO = "pagamentos.pix.realizado.v1";
+    private static final String TOPICO_ESTORNO = "pagamentos.pix.estornado.v1";
     private static final String ORIGEM = "/pagamentos/servico-pix";
 
     @Mock
@@ -46,7 +47,7 @@ class PixServiceTest {
         Clock relogio = Clock.fixed(
                 Instant.parse("2026-08-14T13:00:00.000Z"), ZoneOffset.UTC);
         pixService = new PixService(clienteDoBroker, resultadoPublicacaoListener,
-                relogio, TOPICO, ORIGEM, TOPICO);
+                relogio, TOPICO, TOPICO_ESTORNO, ORIGEM, TOPICO);
     }
 
     @Test
