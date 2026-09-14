@@ -15,7 +15,7 @@ Equipe 02 · líder: **Evandro V. Junior**
 | Alexsander da Silva | 254779 | testes automatizados adicionais do consumidor |
 | Guilherme Henrique Jeske | 1665116 | |
 | Jhonathan Carvo | 258239 | Implementação do agregador de Pix, tratamento de eventos atrasados e deduplicação; implementação do fluxo de resiliência e compensação com `PixEstornado`, DLQ, reprocessamento e atualização da projeção da fatura; documentação da arquitetura, ADR-006, contrato de eventos e testes da entrega final. |
-| Samuel Machado de Lima | 1215716 | |
+| Samuel Machado de Lima | 1215716 | revisão do fluxo de estorno: validação do `eventoId` em branco, tópico de estorno lido da configuração e aviso de `ce_id` ausente no `EstornoListener`; ajustes de documentação no README e no docker-compose |
 
 <!--
 PENDENTE — para a equipe conferir antes da entrega:
